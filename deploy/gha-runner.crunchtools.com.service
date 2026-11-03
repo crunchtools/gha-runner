@@ -10,6 +10,12 @@
 #   No --network crunchtools. The internal network is how production services
 #   reach each other; a CI job must not be able to. Outbound egress only.
 #
+#   The mint step is OPTIONAL (note the leading `-`). A runner that has
+#   registered once keeps long-lived self-refreshing credentials in data/state,
+#   and `run.sh --once` then gives the same one-job-per-container property with
+#   no GitHub App private key on this host at all. Minting only matters for the
+#   first bootstrap or a re-registration.
+#
 #   TWO containers, not one. The GitHub App private key is mounted only into
 #   the short-lived minting container in ExecStartPre. The runner container --
 #   where a job's code actually runs -- receives a registration token, which
@@ -27,7 +33,16 @@ Type=simple
 User=ghrunner
 Group=ghrunner
 Slice=gha-runner.slice
-Environment=XDG_RUNTIME_DIR=/run/user/1001
+# A SYSTEM unit cannot use logind's /run/user/<uid>: podman fails with
+# "acquiring runtime init lock: ... permission denied" because that directory
+# belongs to a user session this unit is not part of. systemd makes us our own,
+# owned by User= above.
+RuntimeDirectory=gha-runner
+RuntimeDirectoryMode=0700
+Environment=XDG_RUNTIME_DIR=/run/gha-runner
+# Rootless podman finds its graph root under HOME; without this it is unset for
+# a system unit and podman writes somewhere else entirely.
+Environment=HOME=/var/home/ghrunner
 WorkingDirectory=/var/home/ghrunner
 
 # Defence in depth. A job already cannot see the service directories -- it is
@@ -35,8 +50,26 @@ WorkingDirectory=/var/home/ghrunner
 # second step: if something escaped to ghrunner's own privileges, the service
 # tree is where production's data lives, and on 2026-11-03 its SQLite
 # databases measured mode 644.
-InaccessiblePaths=-/var/srv -/srv
-NoNewPrivileges=yes
+# Hide every OTHER service's directory, not all of /srv -- this service's own
+# config lives there, and blocking the lot made the unit unable to read its own
+# env file. A tmpfs over /var/srv (which /srv symlinks to) plus two binds gives
+# exactly: our config read-only, our data writable, everyone else's invisible.
+# Production's SQLite databases measured mode 644 on 2026-11-03, so "invisible"
+# is doing real work here, not decoration.
+TemporaryFileSystem=/var/srv:ro
+BindReadOnlyPaths=/var/srv/gha-runner.crunchtools.com/config
+BindPaths=/var/srv/gha-runner.crunchtools.com/data
+
+# NoNewPrivileges is deliberately NOT set. Rootless podman shells out to
+# newuidmap, which does its job through a file capability (cap_setuid), and
+# NoNewPrivileges blocks acquiring it:
+#
+#   newuidmap: write to uid_map failed: Operation not permitted
+#   Error: ... unable to create a new pause process
+#
+# So it is rootless podman or NoNewPrivileges, not both. Rootless is the one
+# that matters here: it is what keeps a job off root. The container itself
+# still runs with podman's default no-new-privileges for its own processes.
 
 Restart=always
 RestartSec=5
@@ -53,7 +86,7 @@ RestartSec=5
 # Mint the registration token in its own container, which holds the App key.
 # --replace so a restart overwrites the previous token rather than failing.
 ExecStartPre=-/usr/bin/podman rm -f gha-runner
-ExecStartPre=/bin/sh -c 'install -d -m 0700 "$XDG_RUNTIME_DIR/gha-token" && \
+ExecStartPre=-/bin/sh -c 'install -d -m 0700 "$XDG_RUNTIME_DIR/gha-token" && \
   /usr/bin/podman run --rm --name gha-runner-mint \
   --env-file /srv/gha-runner.crunchtools.com/config/gha-runner.env \
   --secret gha-app-key,target=/run/secrets/gha-app.pem,uid=1000,gid=1000,mode=0400 \
@@ -78,6 +111,7 @@ ExecStart=/usr/bin/podman run --rm --name gha-runner \
   --env-file /srv/gha-runner.crunchtools.com/config/gha-runner.env \
   -v /run/user/1001/gha-token:/run/gha:U \
   -v /srv/gha-runner.crunchtools.com/data/containers:/home/podman/.local/share/containers:U \
+  -v /srv/gha-runner.crunchtools.com/data/state:/home/podman/state:U \
   quay.io/crunchtools/gha-runner:latest
 ExecStop=/usr/bin/podman stop -t 90 gha-runner
 ExecStopPost=-/usr/bin/podman rm -f gha-runner

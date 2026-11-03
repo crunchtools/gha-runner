@@ -73,5 +73,5 @@ RUN curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 -o /tmp/runner.tar.g
  && tar xzf /tmp/runner.tar.gz -C /home/podman/actions-runner \
  && rm -f /tmp/runner.tar.gz
 
-COPY --chown=1000:1000 scripts/entrypoint.sh scripts/mint-registration-token.sh /home/podman/
+COPY --chown=1000:1000 scripts/entrypoint.sh scripts/mint-registration-token.sh scripts/job-completed.sh /home/podman/
 ENTRYPOINT ["/home/podman/entrypoint.sh"]

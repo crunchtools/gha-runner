@@ -78,13 +78,40 @@ moves the pin deliberately.
   path with contents: the directory carrying the registration token, which the
   runner unlinks once it has registered. It is a DIRECTORY rather than a podman
   secret because a secret mount is read-only and that unlink has to be real.
-- `--ephemeral`: one job, then the runner de-registers and the container exits.
-  The unit restarts it. No job inherits another's workspace.
-- The container where a job's code runs receives a REGISTRATION TOKEN: one
-  repository, expired within the hour. The GitHub App private key that minted
-  it is mounted only into a separate short-lived minting container, because a
-  job able to read that key could mint installation tokens for as long as the
-  key lives. No registry credential and no production secret is ever mounted.
+- **Two registration modes, and the difference is a real security trade that is
+  stated here rather than left in the code.**
+
+  *Ephemeral* is the better one and the target: a registration token minted per
+  container start, one job, then the runner de-registers. A job can then steal
+  nothing durable — the token it could read is good for one repository for one
+  hour and only registers runners. It requires a GitHub App private key on the
+  host to mint from, held only by a separate short-lived minting container so
+  it never enters the container where repository code runs.
+
+  *Persistent* is what runs without that App: credentials earned once, kept in
+  `data/state`, reused on every start. The cost is explicit — the runner
+  process reads those credentials and job steps run as the same user, so job
+  code can read them and impersonate this runner until they are revoked. This
+  is the posture of essentially every self-hosted runner, and what makes it
+  acceptable is not the credential handling, it is **who can put code here**:
+  the consuming repository routes only its own pull requests to this runner, so
+  a fork's code never executes on it. Revoking is removing the runner from the
+  repository.
+
+  Prefer ephemeral. Do not pretend persistent is ephemeral.
+
+  `--once` is NOT the way to make persistent behave like ephemeral: one
+  identity cannot hold two sessions, so restarting per job collides with the
+  session the previous container still holds ("A session for this runner
+  already exists"). Workspace hygiene comes from the job-completed hook, which
+  removes containers and the workspace between jobs and deliberately keeps
+  images, because the images are the cache.
+- No registry credential and no production secret is ever mounted, in either
+  mode.
+- A podman API socket is served inside the container, because tools that
+  INSPECT an image rather than run one — Trivy — reach the engine that way and
+  otherwise cannot find the image the job just built. It grants what a job in
+  this container already has and no more.
 
 ## The Test That Decides This Image
 
