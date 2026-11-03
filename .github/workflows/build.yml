@@ -58,25 +58,15 @@ jobs:
       # half does not -- which is exactly how UBI 10 was eliminated. Load it
       # locally, assert both, and only then publish.
       - name: Build for the smoke test
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Containerfile
-          push: false
-          load: true
-          tags: gha-runner:smoke
-
-      # Run the smoke test under PODMAN, not docker. Nesting inside a docker
-      # container on a GitHub runner fails at "failed to make mount private:
-      # permission denied" unless the outer container is privileged, and a
-      # privileged outer container is not how this image is ever deployed --
-      # a test that only passes with privileges it will not have is not
-      # testing the thing. Rootless podman gives the user namespace the
-      # nested engine needs, which is what the real unit relies on too.
-      #
-      # The image is loaded into docker by the step above, so hand it over.
-      - name: Hand the image to podman
-        run: docker save gha-runner:smoke | podman load
+        # podman, not buildx-into-docker. Nesting inside a docker container on
+        # a GitHub runner needs that container privileged, and this image is
+        # never deployed privileged, so a test that passes only with privileges
+        # it will not have is not evidence. Handing a docker-built image over
+        # with `docker save | podman load` also did not leave podman the name
+        # the test then asked for, so it tried to pull from a registry called
+        # "localhost". Building here with the engine the runner itself uses
+        # removes both problems.
+        run: podman build -t localhost/gha-runner:smoke -f Containerfile .
 
       - name: Smoke test -- nested build AND nested run
         env:
