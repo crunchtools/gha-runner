@@ -61,8 +61,22 @@ jobs:
           load: true
           tags: gha-runner:smoke
 
+      # Run the smoke test under PODMAN, not docker. Nesting inside a docker
+      # container on a GitHub runner fails at "failed to make mount private:
+      # permission denied" unless the outer container is privileged, and a
+      # privileged outer container is not how this image is ever deployed --
+      # a test that only passes with privileges it will not have is not
+      # testing the thing. Rootless podman gives the user namespace the
+      # nested engine needs, which is what the real unit relies on too.
+      #
+      # The image is loaded into docker by the step above, so hand it over.
+      - name: Hand the image to podman
+        run: docker save gha-runner:smoke | podman load
+
       - name: Smoke test -- nested build AND nested run
-        run: ./scripts/smoke-test.sh gha-runner:smoke
+        env:
+          ENGINE: podman
+        run: ./scripts/smoke-test.sh localhost/gha-runner:smoke
 
       - name: Build and push
         id: push
@@ -89,6 +103,19 @@ jobs:
           exit-code: "0"
           severity: "CRITICAL,HIGH"
 
+  validate-constitution:
+    name: Constitution Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: crunchtools/constitution
+          path: .constitution
+
+      - name: Validate constitution
+        run: python3 .constitution/validate-constitution.py .specify/memory/constitution.md --verbose
 
   build-and-push-ghcr:
     runs-on: ubuntu-latest
