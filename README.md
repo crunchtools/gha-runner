@@ -45,6 +45,15 @@ Files in `deploy/` go to `/srv/gha-runner.crunchtools.com/config/`:
                       # exclude it from backups.
 ```
 
+The unit and slice are installed from `config/` to `/etc/systemd/system/`, so
+git in `/srv` stays the source of truth and the drift checks can see it:
+
+```bash
+install -m 0644 config/gha-runner.slice /etc/systemd/system/
+install -m 0644 config/gha-runner.crunchtools.com.service /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now gha-runner.crunchtools.com
+```
+
 The GitHub App private key is a **podman secret**, not a file in `config/`:
 
 ```bash
@@ -71,8 +80,14 @@ already running is the usual way. Check both sides:
 
 ```bash
 systemctl show gha-runner.slice -p CPUQuotaPerSecUSec -p MemoryMax
-cat /sys/fs/cgroup/gha-runner.slice/cpu.max      # expect: 1200000 100000
+cat /sys/fs/cgroup/gha.slice/gha-runner.slice/cpu.max   # expect: 1200000 100000
 ```
+
+Two things about that path. systemd reads the dash in `gha-runner.slice` as
+hierarchy, so the cgroup sits under an implicit `gha.slice` rather than at
+`/sys/fs/cgroup/gha-runner.slice`. And an empty slice has no cgroup at all —
+systemd realizes it when the first unit in it starts — so checking before the
+service runs reports nothing, which is not the same as reporting a problem.
 
 ## Which jobs reach it
 

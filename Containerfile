@@ -63,7 +63,10 @@ WORKDIR /home/podman
 
 # Pinned by version AND digest: an unverified CI runner binary is a
 # supply-chain hole with a shell attached.
-RUN curl -fsSL -o /tmp/runner.tar.gz \
+# --retry, because the first build of this image failed on a transient 502
+# from GitHub's release CDN. The weekly rebuild is unattended; one flaky
+# download should not require a human.
+RUN curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 -o /tmp/runner.tar.gz \
       "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz" \
  && echo "${RUNNER_SHA256}  /tmp/runner.tar.gz" | sha256sum -c - \
  && mkdir -p /home/podman/actions-runner \

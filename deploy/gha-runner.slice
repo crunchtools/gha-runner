@@ -5,10 +5,16 @@
 # that systemd accepted it:
 #
 #   systemctl show gha-runner.slice -p CPUQuotaPerSecUSec -p MemoryMax
-#   cat /sys/fs/cgroup/gha-runner.slice/cpu.max
+#   cat /sys/fs/cgroup/gha.slice/gha-runner.slice/cpu.max   # 1200000 100000
 #
 # Those disagree more often than you would think -- a drop-in added while a
 # slice is already running is accepted and not applied.
+#
+# Note the cgroup PATH: systemd reads the dash in "gha-runner.slice" as
+# hierarchy, so this slice lives under an implicit gha.slice and is NOT at
+# /sys/fs/cgroup/gha-runner.slice. An empty slice has no cgroup at all --
+# systemd realizes it when the first unit in it starts -- so checking the
+# quota before the service runs reports nothing rather than a problem.
 [Unit]
 Description=Resource cap for the GitHub Actions self-hosted runner
 Before=slices.target

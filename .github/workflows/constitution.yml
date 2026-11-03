@@ -12,10 +12,17 @@ on:
   push:
     branches: [main, master]
 
+# A new push on a PR supersedes the run it interrupts. Only PR runs share a
+# group; everything else keys on run_id, which is unique, so no non-PR run can
+# be dropped.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 
 jobs:
   constitution:
     name: Constitution
-    uses: crunchtools/constitution/.github/workflows/validate.yml@v1.18.0
+    uses: crunchtools/constitution/.github/workflows/validate.yml@v1.29.0

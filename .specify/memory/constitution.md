@@ -18,55 +18,43 @@ its container gate is cache-bound rather than CPU-bound: a warm layer cache
 took a cold 2m11s build of that project's image down to 7s, measured, and
 GitHub-hosted runners start cold every time.
 
+Everything in the inherited constitution and the Container Image profile
+applies and is not restated. What follows is only what is particular to this
+image.
+
 ---
-
-## License
-
-AGPL-3.0-or-later
-
-## Versioning
-
-Follow Semantic Versioning 2.0.0. MAJOR/MINOR/PATCH.
 
 ## Base Image
 
 `quay.io/podman/stable`, pinned by digest.
 
-**This is a deliberate exception to the usual UBI base, and the reason is
-measured rather than preferred.** A CI job must RUN containers, not merely build
-them: every verification step in trentina's `container-scan` is a `docker run`.
-On UBI 10 a nested `podman run` fails with ``mount `proc` to `proc`: Operation
-not permitted``. Ruled out on the host by experiment: crun's version (1.30 and
-1.30.1 both fail), the storage driver (`fuse-overlayfs` IS packaged in
-ubi-10 appstream and does not fix it), every `netns`/`userns`/`cgroupns`
-combination, `--privileged`, `--network host`, `unmask=ALL`, and the subuid
-layout. UBI 10 pins podman 5.8.2 and ships no newer build. `quay.io/podman/stable`
+**A deliberate exception to the usual UBI base, on measurement rather than
+preference.** A CI job must RUN containers, not merely build them: every
+verification step in trentina's `container-scan` is a `docker run`. On UBI 10 a
+nested `podman run` fails with ``mount `proc` to `proc`: Operation not
+permitted``. Ruled out by experiment on the host: crun's version (1.30 and
+1.30.1 both fail), the storage driver (`fuse-overlayfs` IS packaged in ubi-10
+appstream and does not fix it), every `netns`/`userns`/`cgroupns` combination,
+`--privileged`, `--network host`, `unmask=ALL`, and the subuid layout. UBI 10
+pins podman 5.8.2 and ships no newer build. `quay.io/podman/stable`
 (podman 5.8.9) does it correctly, and it is the upstream project's own
 podman-in-podman image — which is precisely this image's job.
 
-A Hummingbird/RHHI base is wrong here for a different reason: those images carry
-no shell, no package manager and no coreutils by design, and every Actions
-`run:` step executes as `bash -e {0}`. RHHI is what we ship; this is the machine
-that builds it.
+A Hummingbird/RHHI base is wrong here for a different reason: those images
+carry no shell, no package manager and no coreutils by design, and every
+Actions `run:` step executes as `bash -e {0}`. RHHI is what we ship; this is
+the machine that builds it.
 
-Pinned by DIGEST, not by tag, because this image executes repository code: "what
-changed under us" must never be an open question. The weekly rebuild moves the
-pin deliberately.
+Pinned by DIGEST, not by tag, because this image executes repository code:
+"what changed under us" must never be an open question. The weekly rebuild
+moves the pin deliberately.
 
-## Registry
+## Where This Image Is Published
 
-Published to `quay.io/crunchtools/gha-runner`, mirrored to
-`ghcr.io/crunchtools/gha-runner`.
+`quay.io/crunchtools/gha-runner`, mirrored to `ghcr.io/crunchtools/gha-runner`.
 
-## RHSM Registration
+## Containerfile Rules Particular To This Image
 
-Not required.
-
-## Containerfile Conventions
-
-- Uses `Containerfile` (not Dockerfile)
-- Required LABELs: `maintainer`, `description`
-- `dnf install -y` with `--setopt=install_weak_deps=0`, followed by `dnf clean all`
 - The runner tarball is verified by `sha256sum -c` against a pinned digest. An
   unverified CI runner binary is a supply-chain hole with a shell attached.
 - The base's `containers.conf`, `storage.conf` and `BUILDAH_ISOLATION=chroot`
@@ -82,8 +70,8 @@ Not required.
 - Inside a systemd slice with a CPU and memory quota, so a build cannot starve
   whatever else the host runs.
 - **Not** on the internal `crunchtools` podman network. A CI job must not be
-  able to reach other services; it gets outbound egress and nothing else. This
-  is a deliberate departure from the usual `--network crunchtools` unit.
+  able to reach other services; it gets outbound egress and nothing else. A
+  deliberate departure from the usual `--network crunchtools` unit.
 - Two host paths are mounted and no others: the service's `config` (the env
   file) and `data` (the nested container storage, which is the layer cache the
   whole exercise is for). A third mount is permitted and is a tmpfs, not a host
@@ -92,20 +80,17 @@ Not required.
   secret because a secret mount is read-only and that unlink has to be real.
 - `--ephemeral`: one job, then the runner de-registers and the container exits.
   The unit restarts it. No job inherits another's workspace.
-- The only credential is a GitHub App private key scoped to
-  `administration:write` on ONE repository. No registry credential and no
-  production secret is ever mounted.
+- The container where a job's code runs receives a REGISTRATION TOKEN: one
+  repository, expired within the hour. The GitHub App private key that minted
+  it is mounted only into a separate short-lived minting container, because a
+  job able to read that key could mint installation tokens for as long as the
+  key lives. No registry credential and no production secret is ever mounted.
 
-## Testing
+## The Test That Decides This Image
 
-- **Build test**: CI builds the Containerfile successfully
-- **Nested test**: a nested `podman build` and a nested `podman run` must both
-  succeed. Either one failing makes the image useless, and only the build half
-  works on bases that look fine.
-- **Security scan**: Trivy on the built image
+A nested `podman build` AND a nested `podman run` must both succeed, asserted
+in CI before the image is published.
 
-## Quality Gates
-
-1. Build — CI builds the Containerfile successfully
-2. Push — image published after a successful build
-3. Weekly rebuild — cron picks up base image updates every Monday 4:30 AM UTC
+Both halves, every time, because the build half works on bases where the run
+half does not — which is exactly how UBI 10 was eliminated. An image that
+builds is not evidence of an image that works.
