@@ -105,7 +105,10 @@ moves the pin deliberately.
   session the previous container still holds ("A session for this runner
   already exists"). Workspace hygiene comes from the job-completed hook, which
   removes containers and the workspace between jobs and deliberately keeps
-  images, because the images are the cache.
+  images, because the images are the cache. That hook, and the entrypoint
+  beside it, are root-owned in a root-owned directory and not in the job user's
+  home: a hook that user could replace would run one job's code inside the
+  next.
 - No registry credential and no production secret is ever mounted, in either
   mode.
 - A podman API socket is served inside the container, because tools that
