@@ -4,6 +4,10 @@ on:
   push:
     branches: [main, master]
     tags: ["v*"]
+  # On a pull request this builds and smoke-tests WITHOUT publishing. Without
+  # it, a change to this workflow could only be tested by merging it, and two
+  # builds on main failed for exactly that reason.
+  pull_request:
   repository_dispatch:
     types: [parent-image-updated]
   # Weekly, so the base image's security updates reach the runner without
@@ -31,6 +35,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Quay.io
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -53,18 +58,23 @@ jobs:
       # half does not -- which is exactly how UBI 10 was eliminated. Load it
       # locally, assert both, and only then publish.
       - name: Build for the smoke test
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Containerfile
-          push: false
-          load: true
-          tags: gha-runner:smoke
+        # podman, not buildx-into-docker. Nesting inside a docker container on
+        # a GitHub runner needs that container privileged, and this image is
+        # never deployed privileged, so a test that passes only with privileges
+        # it will not have is not evidence. Handing a docker-built image over
+        # with `docker save | podman load` also did not leave podman the name
+        # the test then asked for, so it tried to pull from a registry called
+        # "localhost". Building here with the engine the runner itself uses
+        # removes both problems.
+        run: podman build -t localhost/gha-runner:smoke -f Containerfile .
 
       - name: Smoke test -- nested build AND nested run
-        run: ./scripts/smoke-test.sh gha-runner:smoke
+        env:
+          ENGINE: podman
+        run: ./scripts/smoke-test.sh localhost/gha-runner:smoke
 
       - name: Build and push
+        if: github.event_name != 'pull_request'
         id: push
         uses: docker/build-push-action@v6
         with:
@@ -77,8 +87,8 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Run Trivy vulnerability scanner
-        continue-on-error: true
         if: github.event_name != 'pull_request'
+        continue-on-error: true
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           # The digest this run produced, not :latest -- a push to a
@@ -88,7 +98,6 @@ jobs:
           format: "table"
           exit-code: "0"
           severity: "CRITICAL,HIGH"
-
 
   build-and-push-ghcr:
     runs-on: ubuntu-latest

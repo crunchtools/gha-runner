@@ -73,5 +73,17 @@ RUN curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 -o /tmp/runner.tar.g
  && tar xzf /tmp/runner.tar.gz -C /home/podman/actions-runner \
  && rm -f /tmp/runner.tar.gz
 
-COPY --chown=1000:1000 scripts/entrypoint.sh scripts/mint-registration-token.sh /home/podman/
-ENTRYPOINT ["/home/podman/entrypoint.sh"]
+# Root-owned, mode 0555, and OUTSIDE /home/podman. The job-completed hook runs
+# after every job as uid 1000 -- the same user a job's own steps run as -- so a
+# hook that user can replace is a command a job leaves behind for the next one.
+# Mode alone does not close that: /home/podman belongs to uid 1000, and write on
+# a directory is permission to unlink a file in it whatever the file's own mode
+# says. /usr/local/bin is root-owned and nothing here ever runs as root.
+USER 0
+COPY scripts/entrypoint.sh scripts/mint-registration-token.sh scripts/job-completed.sh /usr/local/bin/
+RUN chmod 0555 /usr/local/bin/entrypoint.sh \
+      /usr/local/bin/mint-registration-token.sh \
+      /usr/local/bin/job-completed.sh
+
+USER 1000
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
