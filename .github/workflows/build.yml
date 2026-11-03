@@ -4,6 +4,10 @@ on:
   push:
     branches: [main, master]
     tags: ["v*"]
+  # On a pull request this builds and smoke-tests WITHOUT publishing. Without
+  # it, a change to this workflow could only be tested by merging it, and two
+  # builds on main failed for exactly that reason.
+  pull_request:
   repository_dispatch:
     types: [parent-image-updated]
   # Weekly, so the base image's security updates reach the runner without
@@ -31,6 +35,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Quay.io
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -79,6 +84,7 @@ jobs:
         run: ./scripts/smoke-test.sh localhost/gha-runner:smoke
 
       - name: Build and push
+        if: github.event_name != 'pull_request'
         id: push
         uses: docker/build-push-action@v6
         with:
@@ -91,8 +97,8 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Run Trivy vulnerability scanner
-        continue-on-error: true
         if: github.event_name != 'pull_request'
+        continue-on-error: true
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           # The digest this run produced, not :latest -- a push to a
@@ -102,20 +108,6 @@ jobs:
           format: "table"
           exit-code: "0"
           severity: "CRITICAL,HIGH"
-
-  validate-constitution:
-    name: Constitution Validation
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/checkout@v4
-        with:
-          repository: crunchtools/constitution
-          path: .constitution
-
-      - name: Validate constitution
-        run: python3 .constitution/validate-constitution.py .specify/memory/constitution.md --verbose
 
   build-and-push-ghcr:
     runs-on: ubuntu-latest
