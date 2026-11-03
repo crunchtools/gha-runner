@@ -1,0 +1,86 @@
+# Installed at /etc/systemd/system/gha-runner.crunchtools.com.service, from
+# the service's config directory.
+#
+# Three deliberate departures from the usual Crunchtools unit, all security
+# rather than taste, all recorded in the constitution:
+#
+#   User=ghrunner, not root. This container runs repository code. A job that
+#   escapes it must not land as root on the host. (RT #1546: "rootless CI".)
+#
+#   No --network crunchtools. The internal network is how production services
+#   reach each other; a CI job must not be able to. Outbound egress only.
+#
+#   TWO containers, not one. The GitHub App private key is mounted only into
+#   the short-lived minting container in ExecStartPre. The runner container --
+#   where a job's code actually runs -- receives a registration token, which
+#   registers runners on one repository and expires within the hour. A job that
+#   could read the App key could mint installation tokens for as long as the
+#   key lives, so the key never enters that container.
+[Unit]
+Description=Podman container - gha-runner.crunchtools.com (GitHub Actions self-hosted runner)
+Documentation=https://github.com/crunchtools/gha-runner
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=ghrunner
+Group=ghrunner
+Slice=gha-runner.slice
+Environment=XDG_RUNTIME_DIR=/run/user/1001
+WorkingDirectory=/var/home/ghrunner
+
+# Defence in depth. A job already cannot see the service directories -- it is
+# inside the container, which mounts only config and data. This closes the
+# second step: if something escaped to ghrunner's own privileges, the service
+# tree is where production's data lives, and on 2026-11-03 its SQLite
+# databases measured mode 644.
+InaccessiblePaths=-/var/srv -/srv
+NoNewPrivileges=yes
+
+Restart=always
+RestartSec=5
+
+# uid=1000,gid=1000 on the App key secret is load-bearing: podman mounts a
+# secret root-owned, the container runs as uid 1000, and without them the file
+# is simply unreadable.
+#
+# The TOKEN travels as a bind-mounted tmpfs DIRECTORY rather than a second
+# podman secret, because a secret mount is read-only and the runner must be
+# able to unlink the token once it has registered. Mounting the directory, not
+# the file, is what makes the unlink possible at all.
+#
+# Mint the registration token in its own container, which holds the App key.
+# --replace so a restart overwrites the previous token rather than failing.
+ExecStartPre=-/usr/bin/podman rm -f gha-runner
+ExecStartPre=/bin/sh -c 'install -d -m 0700 "$XDG_RUNTIME_DIR/gha-token" && \
+  /usr/bin/podman run --rm --name gha-runner-mint \
+  --env-file /srv/gha-runner.crunchtools.com/config/gha-runner.env \
+  --secret gha-app-key,target=/run/secrets/gha-app.pem,uid=1000,gid=1000,mode=0400 \
+  --entrypoint /home/podman/mint-registration-token.sh \
+  quay.io/crunchtools/gha-runner:latest \
+  > "$XDG_RUNTIME_DIR/gha-token/regtoken" && \
+  chmod 0600 "$XDG_RUNTIME_DIR/gha-token/regtoken"'
+
+# The runner itself: the token, never the key. --device /dev/fuse and
+# /dev/net/tun are what nested rootless podman needs. label=disable is required
+# for the nested engine; what carries the weight here is the unprivileged user
+# and the slice quota, not SELinux.
+#
+# data/containers is the nested container storage: the layer cache, and the
+# entire reason this runner exists. It is a CACHE -- exclude it from backups.
+ExecStart=/usr/bin/podman run --rm --name gha-runner \
+  --label io.containers.autoupdate=registry \
+  --label PODMAN_SYSTEMD_UNIT=gha-runner.crunchtools.com.service \
+  --device /dev/fuse \
+  --device /dev/net/tun \
+  --security-opt label=disable \
+  --env-file /srv/gha-runner.crunchtools.com/config/gha-runner.env \
+  -v /run/user/1001/gha-token:/run/gha:U \
+  -v /srv/gha-runner.crunchtools.com/data/containers:/home/podman/.local/share/containers:U \
+  quay.io/crunchtools/gha-runner:latest
+ExecStop=/usr/bin/podman stop -t 90 gha-runner
+ExecStopPost=-/usr/bin/podman rm -f gha-runner
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,25 @@
+# Installed at /etc/systemd/system/gha-runner.slice.
+#
+# The cap is on a SLICE rather than the unit so it covers whatever a job
+# spawns, not just the podman process. Verify it BOUND rather than trusting
+# that systemd accepted it:
+#
+#   systemctl show gha-runner.slice -p CPUQuotaPerSecUSec -p MemoryMax
+#   cat /sys/fs/cgroup/gha-runner.slice/cpu.max
+#
+# Those disagree more often than you would think -- a drop-in added while a
+# slice is already running is accepted and not applied.
+[Unit]
+Description=Resource cap for the GitHub Actions self-hosted runner
+Before=slices.target
+
+[Slice]
+# 12 of 16 cores on gloval. Four are left for production at all times.
+CPUQuota=1200%
+MemoryHigh=24G
+MemoryMax=32G
+# A gate that loses contention is slow; a production service that loses it is
+# an outage. Default is 100.
+CPUWeight=50
+IOWeight=50
+TasksMax=8192

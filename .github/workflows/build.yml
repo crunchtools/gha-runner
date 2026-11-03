@@ -1,0 +1,146 @@
+name: Build and Push Container Image
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  repository_dispatch:
+    types: [parent-image-updated]
+  # Weekly, so the base image's security updates reach the runner without
+  # anyone remembering to push. A CI runner executes repository code; a stale
+  # one is a liability, not merely out of date.
+  schedule:
+    - cron: "30 4 * * 1"
+  workflow_dispatch:
+env:
+  REGISTRY: quay.io
+  IMAGE_NAME: crunchtools/gha-runner
+  GHCR_IMAGE: ghcr.io/crunchtools/gha-runner
+
+jobs:
+  build-and-push-quay:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Quay.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=
+            type=semver,pattern={{version}}
+
+      # Constitution: a successful BUILD proves almost nothing for this image.
+      # The property that makes it usable is that a job can build AND run
+      # containers inside it, and the build half works on bases where the run
+      # half does not -- which is exactly how UBI 10 was eliminated. Load it
+      # locally, assert both, and only then publish.
+      - name: Build for the smoke test
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Containerfile
+          push: false
+          load: true
+          tags: gha-runner:smoke
+
+      - name: Smoke test -- nested build AND nested run
+        run: ./scripts/smoke-test.sh gha-runner:smoke
+
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Containerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy vulnerability scanner
+        continue-on-error: true
+        if: github.event_name != 'pull_request'
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          # The digest this run produced, not :latest -- a push to a
+          # non-default branch tags by sha and never moves :latest, so :latest
+          # would scan an older image and report it as this build's result.
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}
+          format: "table"
+          exit-code: "0"
+          severity: "CRITICAL,HIGH"
+
+  validate-constitution:
+    name: Constitution Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: crunchtools/constitution
+          path: .constitution
+
+      - name: Validate constitution
+        run: python3 .constitution/validate-constitution.py .specify/memory/constitution.md --verbose
+
+  build-and-push-ghcr:
+    runs-on: ubuntu-latest
+    needs: build-and-push-quay
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ github.token }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.GHCR_IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=
+            type=semver,pattern={{version}}
+
+      - name: Build and push container image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Containerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
