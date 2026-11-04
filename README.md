@@ -84,9 +84,16 @@ podman secret create gha-app-key /path/to/app-private-key.pem   # as each runner
 Podman secrets are per user, so each runner user holds its own copy. Both
 runners mint a registration token on every start.
 
-The App needs `administration:write` on the one repository whose runners it
-registers, and nothing else. No registry credential and no production secret is
-mounted: the workflows that hold those stay on GitHub-hosted runners.
+The App, `gha-runner.crunchtools.com`, holds one permission: **Organization >
+Self-hosted runners: Read and write**. Runners register to the crunchtools org,
+in the `gloval` runner group. Which repositories may use them is that group's
+setting (org settings > Actions > Runner groups); which jobs land on them is each
+repository's `runs-on`. Adding a repository is a runner-group change plus its
+own `runs-on`, not a new deployment. `GHA_REPO` still works for a runner that
+serves one repository; `GHA_ORG` wins when both are set.
+
+No registry credential and no production secret is mounted: the workflows that
+hold those stay on GitHub-hosted runners.
 
 ### Two departures from the standard Crunchtools unit
 

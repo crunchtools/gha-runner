@@ -90,8 +90,8 @@ moves the pin deliberately.
   token is minted per container start by a separate short-lived container that
   alone holds the GitHub App private key; the runner registers `--ephemeral`,
   takes one job and exits, and the unit's restart starts a fresh one. A job can
-  steal nothing durable — the token it could read is good for one repository
-  for one hour and only registers runners — and nothing it starts outlives it:
+  steal nothing durable — the token it could read is good for one hour and
+  only registers runners — and nothing it starts outlives it:
   no process, no modified runner file, and on the uncached runner no stored
   layer.
 
