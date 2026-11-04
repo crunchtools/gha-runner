@@ -28,6 +28,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- The uncached runner's storage tmpfs is a `--mount type=tmpfs,...,U=true`:
+  `--tmpfs` takes no `uid=` option, and podman refused to start the container.
 - The base image is re-pinned to `quay.io/podman/stable:v5.8.9-immutable`'s
   digest. The 1.0.0 pin had been garbage-collected from quay, so the image
   could not be built.
