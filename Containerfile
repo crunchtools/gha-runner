@@ -27,7 +27,9 @@
 #
 # Pinned by digest, not by tag: the runner executes repository code, so "what
 # changed under us" must never be a question.
-FROM quay.io/podman/stable@sha256:86405aa6de095fa3a2b8d15bfc598339df5945e185d753cb24362b467ddd7bc5
+# v5.8.9-immutable. The previous pin's digest was garbage-collected from quay
+# (2026-11-04), which stopped every build of this image.
+FROM quay.io/podman/stable@sha256:0ccbc4e7f79f9c33e7fc959be59f714abbc0f4c9cffbe14f5bceff537a014738
 
 LABEL maintainer="crunchtools.com" \
       description="GitHub Actions self-hosted runner: ephemeral, rootless, with nested podman for container builds" \

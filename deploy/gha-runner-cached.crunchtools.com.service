@@ -1,20 +1,29 @@
-# Installed at /etc/systemd/system/gha-runner.crunchtools.com.service, from
+# Installed at /etc/systemd/system/gha-runner-cached.crunchtools.com.service, from
 # the service's config directory.
+#
+# The CACHED runner: its nested podman storage is a persistent bind mount, so
+# every job reuses the layers earlier jobs built. Everything else is fresh per
+# job: one job per container, registered --ephemeral. That is what makes it fast,
+# and it is also why nothing it builds may be published: every job it runs can
+# write to that storage, and podman reuses an extracted layer without
+# re-hashing it. Pull-request jobs run here. Release builds run on
+# gha-runner-uncached.crunchtools.com, which starts every job empty.
 #
 # Three deliberate departures from the usual Crunchtools unit, all security
 # rather than taste, all recorded in the constitution:
 #
-#   User=ghrunner, not root. This container runs repository code. A job that
+#   User=ghrunner-cached, not root. This container runs repository code. A job that
 #   escapes it must not land as root on the host. (RT #1546: "rootless CI".)
 #
 #   No --network crunchtools. The internal network is how production services
 #   reach each other; a CI job must not be able to. Outbound egress only.
 #
-#   The mint step is OPTIONAL (note the leading `-`). A runner that has
-#   registered once keeps long-lived self-refreshing credentials in data/state,
-#   and `run.sh --once` then gives the same one-job-per-container property with
-#   no GitHub App private key on this host at all. Minting only matters for the
-#   first bootstrap or a re-registration.
+#   The mint step is REQUIRED (no leading `-`). There is no state mount, so the
+#   runner registers --ephemeral on every start: GitHub hands it one job, the
+#   container exits, and Restart=always mints a new token and starts a fresh
+#   one. Only the layer cache below survives a job. A runner that stayed up and
+#   took jobs continuously let one job leave a process or a modified runner
+#   file behind for the next.
 #
 #   TWO containers, not one. The GitHub App private key is mounted only into
 #   the short-lived minting container in ExecStartPre. The runner container --
@@ -23,31 +32,31 @@
 #   could read the App key could mint installation tokens for as long as the
 #   key lives, so the key never enters that container.
 [Unit]
-Description=Podman container - gha-runner.crunchtools.com (GitHub Actions self-hosted runner)
+Description=Podman container - gha-runner-cached.crunchtools.com (GitHub Actions runner, persistent layer cache)
 Documentation=https://github.com/crunchtools/gha-runner
 Wants=network-online.target
 After=network-online.target
 
 [Service]
 Type=simple
-User=ghrunner
-Group=ghrunner
+User=ghrunner-cached
+Group=ghrunner-cached
 Slice=gha-runner.slice
 # A SYSTEM unit cannot use logind's /run/user/<uid>: podman fails with
 # "acquiring runtime init lock: ... permission denied" because that directory
 # belongs to a user session this unit is not part of. systemd makes us our own,
 # owned by User= above.
-RuntimeDirectory=gha-runner
+RuntimeDirectory=gha-runner-cached
 RuntimeDirectoryMode=0700
-Environment=XDG_RUNTIME_DIR=/run/gha-runner
+Environment=XDG_RUNTIME_DIR=/run/gha-runner-cached
 # Rootless podman finds its graph root under HOME; without this it is unset for
 # a system unit and podman writes somewhere else entirely.
-Environment=HOME=/var/home/ghrunner
-WorkingDirectory=/var/home/ghrunner
+Environment=HOME=/var/home/ghrunner-cached
+WorkingDirectory=/var/home/ghrunner-cached
 
 # Defence in depth. A job already cannot see the service directories -- it is
 # inside the container, which mounts only config and data. This closes the
-# second step: if something escaped to ghrunner's own privileges, the service
+# second step: if something escaped to ghrunner-cached's own privileges, the service
 # tree is where production's data lives, and on 2026-11-03 its SQLite
 # databases measured mode 644.
 # Hide every OTHER service's directory, not all of /srv -- this service's own
@@ -57,8 +66,8 @@ WorkingDirectory=/var/home/ghrunner
 # Production's SQLite databases measured mode 644 on 2026-11-03, so "invisible"
 # is doing real work here, not decoration.
 TemporaryFileSystem=/var/srv:ro
-BindReadOnlyPaths=/var/srv/gha-runner.crunchtools.com/config
-BindPaths=/var/srv/gha-runner.crunchtools.com/data
+BindReadOnlyPaths=/var/srv/gha-runner-cached.crunchtools.com/config
+BindPaths=/var/srv/gha-runner-cached.crunchtools.com/data
 
 # NoNewPrivileges is deliberately NOT set. Rootless podman shells out to
 # newuidmap, which does its job through a file capability (cap_setuid), and
@@ -85,10 +94,10 @@ RestartSec=5
 #
 # Mint the registration token in its own container, which holds the App key.
 # --replace so a restart overwrites the previous token rather than failing.
-ExecStartPre=-/usr/bin/podman rm -f gha-runner
-ExecStartPre=-/bin/sh -c 'install -d -m 0700 "$XDG_RUNTIME_DIR/gha-token" && \
-  /usr/bin/podman run --rm --name gha-runner-mint \
-  --env-file /srv/gha-runner.crunchtools.com/config/gha-runner.env \
+ExecStartPre=-/usr/bin/podman rm -f gha-runner-cached
+ExecStartPre=/bin/sh -c 'install -d -m 0700 "$XDG_RUNTIME_DIR/gha-token" && \
+  /usr/bin/podman run --rm --name gha-runner-cached-mint \
+  --env-file /srv/gha-runner-cached.crunchtools.com/config/gha-runner-cached.env \
   --secret gha-app-key,target=/run/secrets/gha-app.pem,uid=1000,gid=1000,mode=0400 \
   --entrypoint /usr/local/bin/mint-registration-token.sh \
   quay.io/crunchtools/gha-runner:latest \
@@ -102,19 +111,18 @@ ExecStartPre=-/bin/sh -c 'install -d -m 0700 "$XDG_RUNTIME_DIR/gha-token" && \
 #
 # data/containers is the nested container storage: the layer cache, and the
 # entire reason this runner exists. It is a CACHE -- exclude it from backups.
-ExecStart=/usr/bin/podman run --rm --name gha-runner \
+ExecStart=/usr/bin/podman run --rm --name gha-runner-cached \
   --label io.containers.autoupdate=registry \
-  --label PODMAN_SYSTEMD_UNIT=gha-runner.crunchtools.com.service \
+  --label PODMAN_SYSTEMD_UNIT=gha-runner-cached.crunchtools.com.service \
   --device /dev/fuse \
   --device /dev/net/tun \
   --security-opt label=disable \
-  --env-file /srv/gha-runner.crunchtools.com/config/gha-runner.env \
-  -v /run/gha-runner/gha-token:/run/gha:U \
-  -v /srv/gha-runner.crunchtools.com/data/containers:/home/podman/.local/share/containers:U \
-  -v /srv/gha-runner.crunchtools.com/data/state:/home/podman/state:U \
+  --env-file /srv/gha-runner-cached.crunchtools.com/config/gha-runner-cached.env \
+  -v /run/gha-runner-cached/gha-token:/run/gha:U \
+  -v /srv/gha-runner-cached.crunchtools.com/data/containers:/home/podman/.local/share/containers:U \
   quay.io/crunchtools/gha-runner:latest
-ExecStop=/usr/bin/podman stop -t 90 gha-runner
-ExecStopPost=-/usr/bin/podman rm -f gha-runner
+ExecStop=/usr/bin/podman stop -t 90 gha-runner-cached
+ExecStopPost=-/usr/bin/podman rm -f gha-runner-cached
 
 [Install]
 WantedBy=multi-user.target

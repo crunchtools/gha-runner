@@ -1,0 +1,134 @@
+# Installed at /etc/systemd/system/gha-runner-uncached.crunchtools.com.service, from
+# the service's config directory.
+#
+# The UNCACHED runner: every job starts with empty container storage, so what
+# it builds depends on nothing an earlier job wrote. Release builds (pushes to
+# main) run here; pull requests run on gha-runner-cached.crunchtools.com.
+#
+# Nothing has to be wiped to get that. The nested container storage is a tmpfs
+# inside the runner container, so it lives in memory, starts empty and is gone
+# the moment the container exits. There is no state mount either, so the
+# entrypoint registers with --ephemeral: GitHub hands the runner exactly one
+# job, the container exits, and Restart=always mints a new token and starts a
+# new, empty one. Even a job that targets this label from a pull request's own
+# workflow leaves nothing behind for the next job.
+#
+# The cost: base images are pulled and every layer is built on every job, and
+# each job pays for one registration (a few seconds).
+#
+# Three deliberate departures from the usual Crunchtools unit, all security
+# rather than taste, all recorded in the constitution:
+#
+#   User=ghrunner-uncached, not root. This container runs repository code. A job that
+#   escapes it must not land as root on the host. (RT #1546: "rootless CI".)
+#
+#   No --network crunchtools. The internal network is how production services
+#   reach each other; a CI job must not be able to. Outbound egress only.
+#
+#   The mint step is REQUIRED here (no leading `-`): with no state mount there
+#   are no saved credentials, so every start registers anew with a fresh token.
+#
+#   TWO containers, not one. The GitHub App private key is mounted only into
+#   the short-lived minting container in ExecStartPre. The runner container --
+#   where a job's code actually runs -- receives a registration token, which
+#   registers runners on one repository and expires within the hour. A job that
+#   could read the App key could mint installation tokens for as long as the
+#   key lives, so the key never enters that container.
+[Unit]
+Description=Podman container - gha-runner-uncached.crunchtools.com (GitHub Actions runner, empty storage every job)
+Documentation=https://github.com/crunchtools/gha-runner
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=ghrunner-uncached
+Group=ghrunner-uncached
+Slice=gha-runner.slice
+# A SYSTEM unit cannot use logind's /run/user/<uid>: podman fails with
+# "acquiring runtime init lock: ... permission denied" because that directory
+# belongs to a user session this unit is not part of. systemd makes us our own,
+# owned by User= above.
+RuntimeDirectory=gha-runner-uncached
+RuntimeDirectoryMode=0700
+Environment=XDG_RUNTIME_DIR=/run/gha-runner-uncached
+# Rootless podman finds its graph root under HOME; without this it is unset for
+# a system unit and podman writes somewhere else entirely.
+Environment=HOME=/var/home/ghrunner-uncached
+WorkingDirectory=/var/home/ghrunner-uncached
+
+# Defence in depth. A job already cannot see the service directories -- it is
+# inside the container, which mounts only config and data. This closes the
+# second step: if something escaped to ghrunner-uncached's own privileges, the service
+# tree is where production's data lives, and on 2026-11-03 its SQLite
+# databases measured mode 644.
+# Hide every OTHER service's directory, not all of /srv -- this service's own
+# config lives there, and blocking the lot made the unit unable to read its own
+# env file. A tmpfs over /var/srv (which /srv symlinks to) plus one bind gives
+# exactly: our config read-only, everyone else's invisible. This runner keeps
+# no data.
+# Production's SQLite databases measured mode 644 on 2026-11-03, so "invisible"
+# is doing real work here, not decoration.
+TemporaryFileSystem=/var/srv:ro
+BindReadOnlyPaths=/var/srv/gha-runner-uncached.crunchtools.com/config
+
+# NoNewPrivileges is deliberately NOT set. Rootless podman shells out to
+# newuidmap, which does its job through a file capability (cap_setuid), and
+# NoNewPrivileges blocks acquiring it:
+#
+#   newuidmap: write to uid_map failed: Operation not permitted
+#   Error: ... unable to create a new pause process
+#
+# So it is rootless podman or NoNewPrivileges, not both. Rootless is the one
+# that matters here: it is what keeps a job off root. The container itself
+# still runs with podman's default no-new-privileges for its own processes.
+
+Restart=always
+RestartSec=5
+
+# uid=1000,gid=1000 on the App key secret is load-bearing: podman mounts a
+# secret root-owned, the container runs as uid 1000, and without them the file
+# is simply unreadable.
+#
+# The TOKEN travels as a bind-mounted tmpfs DIRECTORY rather than a second
+# podman secret, because a secret mount is read-only and the runner must be
+# able to unlink the token once it has registered. Mounting the directory, not
+# the file, is what makes the unlink possible at all.
+#
+# Mint the registration token in its own container, which holds the App key.
+# --replace so a restart overwrites the previous token rather than failing.
+ExecStartPre=-/usr/bin/podman rm -f gha-runner-uncached
+ExecStartPre=/bin/sh -c 'install -d -m 0700 "$XDG_RUNTIME_DIR/gha-token" && \
+  /usr/bin/podman run --rm --name gha-runner-uncached-mint \
+  --env-file /srv/gha-runner-uncached.crunchtools.com/config/gha-runner-uncached.env \
+  --secret gha-app-key,target=/run/secrets/gha-app.pem,uid=1000,gid=1000,mode=0400 \
+  --entrypoint /usr/local/bin/mint-registration-token.sh \
+  quay.io/crunchtools/gha-runner:latest \
+  > "$XDG_RUNTIME_DIR/gha-token/regtoken" && \
+  chmod 0600 "$XDG_RUNTIME_DIR/gha-token/regtoken"'
+
+# The runner itself: the token, never the key. --device /dev/fuse and
+# /dev/net/tun are what nested rootless podman needs. label=disable is required
+# for the nested engine; what carries the weight here is the unprivileged user
+# and the slice quota, not SELinux.
+#
+# No state mount, and the storage is a tmpfs: see the header. 16g holds a cold
+# trentina build (base images, the dependency layer, the finished image) with
+# room to spare, and counts against gha-runner.slice's memory cap like the job
+# itself. Over it, a build fails with "no space left on device" rather than
+# pressing on the host. uid/gid 1000 is the image's podman user.
+ExecStart=/usr/bin/podman run --rm --name gha-runner-uncached \
+  --label io.containers.autoupdate=registry \
+  --label PODMAN_SYSTEMD_UNIT=gha-runner-uncached.crunchtools.com.service \
+  --device /dev/fuse \
+  --device /dev/net/tun \
+  --security-opt label=disable \
+  --env-file /srv/gha-runner-uncached.crunchtools.com/config/gha-runner-uncached.env \
+  -v /run/gha-runner-uncached/gha-token:/run/gha:U \
+  --tmpfs /home/podman/.local/share/containers:rw,size=16g,mode=0700,uid=1000,gid=1000 \
+  quay.io/crunchtools/gha-runner:latest
+ExecStop=/usr/bin/podman stop -t 90 gha-runner-uncached
+ExecStopPost=-/usr/bin/podman rm -f gha-runner-uncached
+
+[Install]
+WantedBy=multi-user.target
