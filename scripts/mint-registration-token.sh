@@ -1,14 +1,19 @@
 #!/bin/bash
-# Print a GitHub Actions runner registration token for GHA_REPO.
+# Print a GitHub Actions runner registration token for GHA_ORG (an
+# organization) or, when that is unset, GHA_REPO (owner/repo).
 #
 # This runs in its own short-lived container that holds the App private key.
 # The runner container -- the one a repository job executes in -- never sees
-# that key: it gets only the token this prints, which registers runners on one
-# repository and expires in an hour. A job that reads the key could instead
+# that key: it gets only the token this prints, which registers runners and
+# expires in an hour. A job that reads the key could instead
 # mint installation tokens for as long as the key lives.
 set -euo pipefail
 
-REPO=${GHA_REPO:?GHA_REPO must be owner/repo}
+if [ -n "${GHA_ORG:-}" ]; then
+  SCOPE="orgs/$GHA_ORG"
+else
+  SCOPE="repos/${GHA_REPO:?set GHA_ORG, or GHA_REPO as owner/repo}"
+fi
 APP_ID=${GHA_APP_ID:?GHA_APP_ID must be set}
 KEY=${GHA_APP_KEY_FILE:-/run/secrets/gha-app.pem}
 API=https://api.github.com
@@ -37,14 +42,18 @@ api_post() {  # $1 authorization header value, $2 path
 
 jwt=$(app_jwt)
 install_id=$(curl -sS -H "Authorization: Bearer $jwt" \
-  -H "Accept: application/vnd.github+json" "$API/repos/$REPO/installation" \
+  -H "Accept: application/vnd.github+json" "$API/$SCOPE/installation" \
   | jq -r '.id // empty')
-[ -n "$install_id" ] || { echo "CANNOT MINT: app is not installed on the repo" >&2; exit 2; }
+[ -n "$install_id" ] || { echo "CANNOT MINT: app is not installed on $SCOPE" >&2; exit 2; }
 
 inst_token=$(api_post "Bearer $jwt" "app/installations/$install_id/access_tokens" | jq -r '.token // empty')
 [ -n "$inst_token" ] || { echo "CANNOT MINT: no installation token" >&2; exit 2; }
 
-reg_token=$(api_post "token $inst_token" "repos/$REPO/actions/runners/registration-token" | jq -r '.token // empty')
+# Org-scoped when GHA_ORG is set: it could register a runner into any of the
+# org's runner groups. No job ever sees it. The entrypoint consumes it in
+# config.sh, unlinks the file and refuses to start if the file survives, all
+# before run.sh accepts a job.
+reg_token=$(api_post "token $inst_token" "$SCOPE/actions/runners/registration-token" | jq -r '.token // empty')
 [ -n "$reg_token" ] || { echo "CANNOT MINT: no registration token" >&2; exit 2; }
 
 printf '%s' "$reg_token"

@@ -31,7 +31,7 @@
 #   TWO containers, not one. The GitHub App private key is mounted only into
 #   the short-lived minting container in ExecStartPre. The runner container --
 #   where a job's code actually runs -- receives a registration token, which
-#   registers runners on one repository and expires within the hour. A job that
+#   registers runners and expires within the hour. A job that
 #   could read the App key could mint installation tokens for as long as the
 #   key lives, so the key never enters that container.
 [Unit]

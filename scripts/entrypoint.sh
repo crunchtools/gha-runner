@@ -15,7 +15,14 @@ set -euo pipefail
 # mount is read-only -- and the first version of this script "removed" it with
 # `rm -f ... || true`, which failed silently and left the comment lying.
 TOKEN_FILE=${GHA_REG_TOKEN_FILE:-/run/gha/regtoken}
-REPO=${GHA_REPO:?GHA_REPO must be owner/repo}
+# Where runners register: an organization (GHA_ORG), so one deployment can
+# serve every repository the org's runner group allows, or a single repository
+# (GHA_REPO, owner/repo). GHA_ORG wins when both are set.
+if [ -n "${GHA_ORG:-}" ]; then
+  SCOPE_URL="https://github.com/$GHA_ORG"
+else
+  SCOPE_URL="https://github.com/${GHA_REPO:?set GHA_ORG, or GHA_REPO as owner/repo}"
+fi
 LABELS=${GHA_LABELS:?GHA_LABELS must be set}
 
 # Two ways to be a runner, and the first needs no credential on this host.
@@ -103,10 +110,11 @@ EPHEMERAL=--ephemeral
 if [ -d "$STATE" ] && [ -w "$STATE" ]; then EPHEMERAL=; fi
 
 ./config.sh --unattended $EPHEMERAL --disableupdate --replace \
-  --url "https://github.com/$REPO" \
+  --url "$SCOPE_URL" \
   --token "$(cat "$TOKEN_FILE")" \
-  --name "${GHA_RUNNER_NAME:-$(hostname)-$$}" \
+  --name "${GHA_RUNNER_NAME:-gha}-$(hostname)" \
   --labels "$LABELS" \
+  ${GHA_ORG:+--runnergroup "${GHA_RUNNER_GROUP:-Default}"} \
   --work /home/podman/_work
 
 # Keep what the registration earned, so every later start needs no credential.
