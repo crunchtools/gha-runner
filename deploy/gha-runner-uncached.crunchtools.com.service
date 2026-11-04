@@ -116,7 +116,8 @@ ExecStartPre=/bin/sh -c 'install -d -m 0700 "$XDG_RUNTIME_DIR/gha-token" && \
 # trentina build (base images, the dependency layer, the finished image) with
 # room to spare, and counts against gha-runner.slice's memory cap like the job
 # itself. Over it, a build fails with "no space left on device" rather than
-# pressing on the host. uid/gid 1000 is the image's podman user.
+# pressing on the host. `--mount ... U=true` hands it to the image's podman
+# user (1000); `--tmpfs` takes no uid= option and podman refuses to start.
 ExecStart=/usr/bin/podman run --rm --name gha-runner-uncached \
   --label io.containers.autoupdate=registry \
   --label PODMAN_SYSTEMD_UNIT=gha-runner-uncached.crunchtools.com.service \
@@ -125,7 +126,7 @@ ExecStart=/usr/bin/podman run --rm --name gha-runner-uncached \
   --security-opt label=disable \
   --env-file /srv/gha-runner-uncached.crunchtools.com/config/gha-runner-uncached.env \
   -v /run/gha-runner-uncached/gha-token:/run/gha:U \
-  --tmpfs /home/podman/.local/share/containers:rw,size=16g,mode=0700,uid=1000,gid=1000 \
+  --mount type=tmpfs,destination=/home/podman/.local/share/containers,tmpfs-size=16g,tmpfs-mode=0700,U=true \
   quay.io/crunchtools/gha-runner:latest
 ExecStop=/usr/bin/podman stop -t 90 gha-runner-uncached
 ExecStopPost=-/usr/bin/podman rm -f gha-runner-uncached
