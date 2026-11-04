@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Two deployments, cached and uncached.** `gha-runner.crunchtools.com` is
+  renamed `gha-runner-cached.crunchtools.com` (user `ghrunner-cached`, label
+  `crunchtools-cached`) and keeps its persistent layer cache for pull requests.
+  The new `gha-runner-uncached.crunchtools.com` (user `ghrunner-uncached`,
+  label `crunchtools-uncached`) registers `--ephemeral` and keeps its container
+  storage on a tmpfs, so every job starts empty: it builds what gets published.
+  Both now register `--ephemeral` and take one job per container; the cached
+  runner no longer stays up between jobs, where one job could leave a process
+  behind for the next. No image change.
+
 ## [1.0.0] - 2026-11-03
 
 First release. It runs `crunchtools/trentina`'s container gate on gloval, which

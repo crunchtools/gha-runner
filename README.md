@@ -33,32 +33,56 @@ The constitution records what was ruled out by experiment. A Hummingbird/RHHI
 base cannot work at all here: those images have no shell, and every Actions
 `run:` step executes as `bash -e {0}`.
 
-## Deployment
+## Two deployments: cached and uncached
 
-Files in `deploy/` go to `/srv/gha-runner.crunchtools.com/config/`:
+The same image runs as two units on gloval, named for what they do:
+
+| Unit | User | Label | Container storage | Takes |
+|---|---|---|---|---|
+| `gha-runner-cached.crunchtools.com` | `ghrunner-cached` | `crunchtools-cached` | persistent bind mount: the layer cache | our pull requests |
+| `gha-runner-uncached.crunchtools.com` | `ghrunner-uncached` | `crunchtools-uncached` | 16g tmpfs, empty every job | pushes to `main`: the build that gets published |
+
+The cache is what makes the cached runner fast, and it is also why nothing it
+builds may be published: every job it runs can write to that storage, and podman
+reuses an extracted layer without re-hashing it. Both runners register
+`--ephemeral`, take one job and exit, so no process or runner file outlives its
+job; the cached one keeps only its layer cache. The uncached runner's storage is
+a tmpfs inside the container, so its next job starts from nothing. Separate
+users keep the two stores apart.
+
+Each unit's files go to its own `/srv/<unit>/config/`:
 
 ```
-/srv/gha-runner.crunchtools.com/
-├── config/   # gha-runner.env, the .service and .slice
+/srv/gha-runner-cached.crunchtools.com/
+├── config/   # gha-runner-cached.env, the .service and .slice
 └── data/
     └── containers/   # nested container storage: the layer cache. A CACHE --
                       # exclude it from backups.
+/srv/gha-runner-uncached.crunchtools.com/
+└── config/   # gha-runner-uncached.env and the .service; it keeps no data
 ```
 
-The unit and slice are installed from `config/` to `/etc/systemd/system/`, so
-git in `/srv` stays the source of truth and the drift checks can see it:
+The units and the shared slice are installed from `config/` to
+`/etc/systemd/system/`, so git in `/srv` stays the source of truth and the drift
+checks can see it:
 
 ```bash
-install -m 0644 config/gha-runner.slice /etc/systemd/system/
-install -m 0644 config/gha-runner.crunchtools.com.service /etc/systemd/system/
-systemctl daemon-reload && systemctl enable --now gha-runner.crunchtools.com
+install -m 0644 /srv/gha-runner-cached.crunchtools.com/config/gha-runner.slice /etc/systemd/system/
+for u in gha-runner-cached gha-runner-uncached; do
+  install -m 0644 /srv/$u.crunchtools.com/config/$u.crunchtools.com.service /etc/systemd/system/
+done
+systemctl daemon-reload
+systemctl enable --now gha-runner-cached.crunchtools.com gha-runner-uncached.crunchtools.com
 ```
 
 The GitHub App private key is a **podman secret**, not a file in `config/`:
 
 ```bash
-podman secret create gha-app-key /path/to/app-private-key.pem
+podman secret create gha-app-key /path/to/app-private-key.pem   # as each runner user
 ```
+
+Podman secrets are per user, so each runner user holds its own copy. Both
+runners mint a registration token on every start.
 
 The App needs `administration:write` on the one repository whose runners it
 registers, and nothing else. No registry credential and no production secret is
@@ -68,7 +92,7 @@ mounted: the workflows that hold those stay on GitHub-hosted runners.
 
 Both security, not taste, and both are in the constitution:
 
-- **`User=ghrunner`, not root.** This container runs repository code. A job that
+- **`User=ghrunner-cached` / `ghrunner-uncached`, not root.** This container runs repository code. A job that
   escapes it must not land as root on the host.
 - **Not on the `crunchtools` network.** The internal network is how production
   services reach each other; a CI job must not be able to. Outbound only.
@@ -98,15 +122,20 @@ someone can click past. In `trentina`:
 runs-on: >-
   ${{ github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
-      && (vars.FAST_RUNNER_LABEL || 'ubuntu-latest')
+      && github.event.pull_request.user.login != 'dependabot[bot]'
+      && (vars.CACHED_RUNNER_LABEL || 'ubuntu-latest')
+      || github.event_name != 'pull_request'
+      && (vars.UNCACHED_RUNNER_LABEL || 'ubuntu-latest')
       || 'ubuntu-latest' }}
 ```
 
-A fork's pull request therefore never executes here. `push`, `schedule` and
-`workflow_dispatch` stay GitHub-hosted, so the image that gets published is
-never built by this runner — it can make a pull request pass that should not;
-it cannot ship.
+A fork's pull request never executes on gloval. Neither does a Dependabot pull
+request: its job runs the new release of a third-party package, and that is not
+code we want writing to the cached runner's storage. Pushes and scheduled runs
+go to the uncached runner, so the image that gets published comes from storage
+nothing else has written to.
 
-Clearing `FAST_RUNNER_LABEL` is the kill switch: every job goes back to
-GitHub-hosted with no commit and no review. Use it when the host is down,
-because a required check that never reports blocks every pull request silently.
+Clearing `CACHED_RUNNER_LABEL` or `UNCACHED_RUNNER_LABEL` is the kill switch for
+that runner: its jobs go back to GitHub-hosted with no commit and no review. Use
+it when the host is down, because a required check that never reports blocks
+every pull request silently.
