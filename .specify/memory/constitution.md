@@ -1,6 +1,6 @@
 # gha-runner Constitution
 
-> **Version:** 1.1.0
+> **Version:** 1.2.0
 > **Ratified:** 2026-11-03
 > **Status:** Active
 > **Inherits:** [crunchtools/constitution](https://github.com/crunchtools/constitution) v1.29.0
@@ -11,9 +11,13 @@ whose CI is cache-bound. It is a build machine: it takes one job, runs it, and
 exits. It builds and runs containers for that job, nested and rootless. It
 ships nothing and serves nothing.
 
-Nothing in the image names a consuming repository — `GHA_REPO`, `GHA_LABELS`
-and the App installation decide that, so a second consumer is a second
-deployment and not a second image. `crunchtools/trentina` is the first, because
+Nothing in the image names a consuming repository. Runners register to the
+crunchtools organization (`GHA_ORG`) in a runner group (`GHA_RUNNER_GROUP`);
+the group's repository list decides which repositories may use them, and each
+repository's `runs-on` decides which of its jobs land here. A second consumer
+is a change to that list and to its own workflow, not a second deployment and
+not a second image. `GHA_REPO` remains for a runner that serves one
+repository. `crunchtools/trentina` is the first, because
 its container gate is cache-bound rather than CPU-bound: a warm layer cache
 took a cold 2m11s build of that project's image down to 7s, measured, and
 GitHub-hosted runners start cold every time.

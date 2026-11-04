@@ -13,7 +13,8 @@ All notable changes to this project are documented here. The format follows
   a GitHub App holding only Organization > Self-hosted runners. One key on the
   host serves every repository the runner group admits. `GHA_REPO` keeps the
   single-repository mode. A runner's name is `GHA_RUNNER_NAME` plus its
-  container id, since every container is a new one-job runner.
+  container id, since every container is a new one-job runner. Constitution
+  1.2.0: a second consumer is a runner-group change, not a second deployment.
 - **Two deployments, cached and uncached.** `gha-runner.crunchtools.com` is
   renamed `gha-runner-cached.crunchtools.com` (user `ghrunner-cached`, label
   `crunchtools-cached`) and keeps its persistent layer cache for pull requests.

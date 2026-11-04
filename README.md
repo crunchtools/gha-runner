@@ -3,9 +3,10 @@
 The self-hosted GitHub Actions runner image for Crunchtools. It takes one job,
 runs it, and exits.
 
-Generic by construction: nothing in the image names a repository. `GHA_REPO`,
-`GHA_LABELS` and which repositories the GitHub App is installed on decide that,
-so a second consumer is a second deployment rather than a second image.
+Generic by construction: nothing in the image names a repository. Runners
+register to the crunchtools org in a runner group; the group's repository list
+and each repository's `runs-on` decide who uses them, so a second consumer is a
+runner-group change rather than a second deployment or a second image.
 `crunchtools/trentina` is the first consumer.
 
 ## Why it exists
