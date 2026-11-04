@@ -1,6 +1,6 @@
 # gha-runner Constitution
 
-> **Version:** 1.0.0
+> **Version:** 1.1.0
 > **Ratified:** 2026-11-03
 > **Status:** Active
 > **Inherits:** [crunchtools/constitution](https://github.com/crunchtools/constitution) v1.29.0
@@ -72,45 +72,41 @@ moves the pin deliberately.
 - **Not** on the internal `crunchtools` podman network. A CI job must not be
   able to reach other services; it gets outbound egress and nothing else. A
   deliberate departure from the usual `--network crunchtools` unit.
-- Two host paths are mounted and no others: the service's `config` (the env
-  file) and `data` (the nested container storage, which is the layer cache the
-  whole exercise is for). A third mount is permitted and is a tmpfs, not a host
-  path with contents: the directory carrying the registration token, which the
-  runner unlinks once it has registered. It is a DIRECTORY rather than a podman
-  secret because a secret mount is read-only and that unlink has to be real.
-- **Two registration modes, and the difference is a real security trade that is
-  stated here rather than left in the code.**
+- **Two deployments, named for their storage.** `gha-runner-cached` keeps its
+  nested container storage on a host path (`data/containers`, the layer cache)
+  and takes a repository's own pull requests. `gha-runner-uncached` keeps it on
+  a tmpfs inside the container and takes the builds that get published. A
+  cached store cannot build a release: every job it runs can write to that
+  storage, and podman reuses an extracted layer without re-hashing it. Each runs
+  as its own user, so neither can reach the other's store.
+- Mounts, and no others. Host paths: the service's `config` (the env file,
+  read-only) and, on the cached runner only, `data/containers`. Tmpfs: the
+  directory carrying the registration token, which the runner unlinks once it
+  has registered (a DIRECTORY rather than a podman secret because a secret
+  mount is read-only and that unlink has to be real); and, on the uncached
+  runner only, the nested container storage, capped in size and charged to the
+  slice like the job itself.
+- **Ephemeral registration, one job per container, on both.** A registration
+  token is minted per container start by a separate short-lived container that
+  alone holds the GitHub App private key; the runner registers `--ephemeral`,
+  takes one job and exits, and the unit's restart starts a fresh one. A job can
+  steal nothing durable — the token it could read is good for one repository
+  for one hour and only registers runners — and nothing it starts outlives it:
+  no process, no modified runner file, and on the uncached runner no stored
+  layer.
 
-  *Ephemeral* is the better one and the target: a registration token minted per
-  container start, one job, then the runner de-registers. A job can then steal
-  nothing durable — the token it could read is good for one repository for one
-  hour and only registers runners. It requires a GitHub App private key on the
-  host to mint from, held only by a separate short-lived minting container so
-  it never enters the container where repository code runs.
+  Persistent registration (credentials saved in `data/state` and reused, the
+  runner taking jobs continuously) was the 1.0.0 posture of the cached runner
+  and is retired: job code could read those credentials and impersonate the
+  runner, and a job could leave a process or a file behind for the next job.
+  The entrypoint still supports it for a host with no App key; neither
+  deployment uses it.
 
-  *Persistent* is what runs without that App: credentials earned once, kept in
-  `data/state`, reused on every start. The cost is explicit — the runner
-  process reads those credentials and job steps run as the same user, so job
-  code can read them and impersonate this runner until they are revoked. This
-  is the posture of essentially every self-hosted runner, and what makes it
-  acceptable is not the credential handling, it is **who can put code here**:
-  the consuming repository routes only its own pull requests to this runner, so
-  a fork's code never executes on it. Revoking is removing the runner from the
-  repository.
-
-  Prefer ephemeral. Do not pretend persistent is ephemeral.
-
-  `--once` is NOT the way to make persistent behave like ephemeral: one
-  identity cannot hold two sessions, so restarting per job collides with the
-  session the previous container still holds ("A session for this runner
-  already exists"). Workspace hygiene comes from the job-completed hook, which
-  removes containers and the workspace between jobs and deliberately keeps
-  images, because the images are the cache. That hook, and the entrypoint
-  beside it, are root-owned in a root-owned directory and not in the job user's
-  home: a hook that user could replace would run one job's code inside the
-  next.
-- No registry credential and no production secret is ever mounted, in either
-  mode.
+  The job-completed hook removes containers and the workspace after each job.
+  It, and the entrypoint beside it, are root-owned in a root-owned directory
+  and not in the job user's home: a hook that user could replace would run one
+  job's code inside the next.
+- No registry credential and no production secret is ever mounted.
 - A podman API socket is served inside the container, because tools that
   INSPECT an image rather than run one — Trivy — reach the engine that way and
   otherwise cannot find the image the job just built. It grants what a job in

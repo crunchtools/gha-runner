@@ -16,7 +16,14 @@ All notable changes to this project are documented here. The format follows
   storage on a tmpfs, so every job starts empty: it builds what gets published.
   Both now register `--ephemeral` and take one job per container; the cached
   runner no longer stays up between jobs, where one job could leave a process
-  behind for the next. No image change.
+  behind for the next. Constitution 1.1.0 records the two deployments, the
+  uncached runner's storage tmpfs, and ephemeral registration on both.
+
+### Fixed
+
+- The base image is re-pinned to `quay.io/podman/stable:v5.8.9-immutable`'s
+  digest. The 1.0.0 pin had been garbage-collected from quay, so the image
+  could not be built.
 
 ## [1.0.0] - 2026-11-03
 
