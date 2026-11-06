@@ -10,8 +10,10 @@ on:
   pull_request:
   repository_dispatch:
     types: [parent-image-updated]
-  # Weekly, so the base image's security updates reach the runner without
-  # anyone remembering to push. A CI runner executes repository code; a stale
+  # Weekly, so Fedora's security updates reach the runner without anyone
+  # remembering to push. The base is pinned by digest, so the update comes from
+  # the Containerfile's `dnf -y upgrade`, which UPGRADE_STAMP forces past the
+  # layer cache. A CI runner executes repository code; a stale
   # one is a liability, not merely out of date.
   schedule:
     - cron: "30 4 * * 1"
@@ -83,9 +85,13 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: UPGRADE_STAMP=${{ github.run_id }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Language packages only. Trivy has no Fedora advisory source, so the OS
+      # layer is not covered by this scan; `dnf -y upgrade` on every run is
+      # that layer's control. A green result here says nothing about it.
       - name: Run Trivy vulnerability scanner
         if: github.event_name != 'pull_request'
         continue-on-error: true
@@ -139,4 +145,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Same stamp as the quay job, so this mirror reuses the layers that
+          # job just wrote instead of upgrading again and diverging from it.
+          build-args: UPGRADE_STAMP=${{ github.run_id }}
           cache-from: type=gha

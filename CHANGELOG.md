@@ -28,6 +28,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **The OS layer is upgraded on every build.** The base is pinned by digest and
+  Trivy cannot scan Fedora packages, so nothing ever moved them: each weekly
+  rebuild reproduced the same OS layer. The Containerfile now runs
+  `dnf -y upgrade` before installing, with a per-run `UPGRADE_STAMP` build arg
+  so the gha layer cache cannot replay an old result. Constitution 1.3.0 names
+  Trivy's blind spot and the upgrade as the control (#14).
+
 - The uncached runner's storage tmpfs is a `--mount type=tmpfs,...,U=true`:
   `--tmpfs` takes no `uid=` option, and podman refused to start the container.
 - The base image is re-pinned to `quay.io/podman/stable:v5.8.9-immutable`'s
