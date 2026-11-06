@@ -1,6 +1,6 @@
 # gha-runner Constitution
 
-> **Version:** 1.2.0
+> **Version:** 1.3.0
 > **Ratified:** 2026-11-03
 > **Status:** Active
 > **Inherits:** [crunchtools/constitution](https://github.com/crunchtools/constitution) v1.31.0
@@ -50,8 +50,16 @@ Actions `run:` step executes as `bash -e {0}`. RHHI is what we ship; this is
 the machine that builds it.
 
 Pinned by DIGEST, not by tag, because this image executes repository code:
-"what changed under us" must never be an open question. The weekly rebuild
-moves the pin deliberately.
+"what changed under us" must never be an open question. The pin moves only
+when a person edits it.
+
+**The OS layer's only control is `dnf -y upgrade` on every build.** Trivy has
+no Fedora advisory source: it detects `family="fedora"`, warns `Unsupported
+os`, and scans language packages only. Its green result says nothing about the
+OS packages, and with the base pinned nothing else would ever move them. So the
+Containerfile upgrades before it installs, a per-run `UPGRADE_STAMP` build arg
+keeps the layer cache from replaying an old upgrade, and the weekly rebuild is
+what carries Fedora's fixes in.
 
 ## Where This Image Is Published
 

@@ -45,7 +45,18 @@ USER 0
 # upstream's stated Fedora prerequisites, and unlike UBI this base has all five.
 # git/tar/gzip are actions/checkout's; jq and openssl sign the GitHub App JWT in
 # the entrypoint.
-RUN dnf -y install --setopt=install_weak_deps=0 \
+#
+# `dnf -y upgrade` first, because nothing else moves this layer: the base is
+# pinned by digest, and Trivy has no Fedora advisory source (it prints
+# `Unsupported os family="fedora"` and scans language packages only), so the
+# OS packages get no CVE coverage. The weekly rebuild is the only control.
+# UPGRADE_STAMP is per pipeline run and is referenced in the RUN on purpose:
+# BuildKit only misses the cache where an ARG is used, and without the miss
+# the gha layer cache would replay last week's upgrade forever.
+ARG UPGRADE_STAMP=unset
+RUN : "upgrade ${UPGRADE_STAMP}" \
+ && dnf -y upgrade --setopt=install_weak_deps=0 \
+ && dnf -y install --setopt=install_weak_deps=0 \
       lttng-ust openssl-libs krb5-libs zlib libicu \
       git tar gzip findutils which procps-ng hostname \
       jq openssl \
