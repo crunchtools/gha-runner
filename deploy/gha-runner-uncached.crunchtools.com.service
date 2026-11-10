@@ -35,6 +35,8 @@
 #   could read the App key could mint installation tokens for as long as the
 #   key lives, so the key never enters that container.
 [Unit]
+Requires=srv-secrets@gha-runner-uncached.crunchtools.com.service
+After=srv-secrets@gha-runner-uncached.crunchtools.com.service
 Description=Podman container - gha-runner-uncached.crunchtools.com (GitHub Actions runner, empty storage every job)
 Documentation=https://github.com/crunchtools/gha-runner
 Wants=network-online.target
@@ -86,9 +88,16 @@ BindReadOnlyPaths=/var/srv/gha-runner-uncached.crunchtools.com/config
 Restart=always
 RestartSec=5
 
-# uid=1000,gid=1000 on the App key secret is load-bearing: podman mounts a
-# secret root-owned, the container runs as uid 1000, and without them the file
-# is simply unreadable.
+# The App key now comes from OpenBao via /run/srv-secrets (RT#1604) instead of
+# a rootless podman secret, whose file driver kept it in PLAINTEXT under this
+# user's containers storage.
+#
+# The ownership is still load-bearing, just expressed differently. This is a
+# ROOTLESS podman run, so container uid 1000 is host subuid START+999 --
+# 656359 for ghrunner-cached, 721895 for ghrunner-uncached. srv-secrets sets
+# that owner through secrets.modes, and secrets.dirmode makes the directory
+# 0711 so this user can TRAVERSE to the file. It never needs to read it: the
+# container reaches it through the userns mapping.
 #
 # The TOKEN travels as a bind-mounted tmpfs DIRECTORY rather than a second
 # podman secret, because a secret mount is read-only and the runner must be
@@ -101,7 +110,7 @@ ExecStartPre=-/usr/bin/podman rm -f gha-runner-uncached
 ExecStartPre=/bin/sh -c 'install -d -m 0700 "$XDG_RUNTIME_DIR/gha-token" && \
   /usr/bin/podman run --rm --name gha-runner-uncached-mint \
   --env-file /srv/gha-runner-uncached.crunchtools.com/config/gha-runner-uncached.env \
-  --secret gha-app-key,target=/run/secrets/gha-app.pem,uid=1000,gid=1000,mode=0400 \
+  -v /run/srv-secrets/gha-runner-uncached.crunchtools.com/gha-app.pem:/run/secrets/gha-app.pem:ro \
   --entrypoint /usr/local/bin/mint-registration-token.sh \
   quay.io/crunchtools/gha-runner:latest \
   > "$XDG_RUNTIME_DIR/gha-token/regtoken" && \
