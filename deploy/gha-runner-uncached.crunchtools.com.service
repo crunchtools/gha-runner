@@ -112,7 +112,7 @@ ExecStartPre=/bin/sh -c 'install -d -m 0700 "$XDG_RUNTIME_DIR/gha-token" && \
   --env-file /srv/gha-runner-uncached.crunchtools.com/config/gha-runner-uncached.env \
   -v /run/srv-secrets/gha-runner-uncached.crunchtools.com/gha-app.pem:/run/secrets/gha-app.pem:ro \
   --entrypoint /usr/local/bin/mint-registration-token.sh \
-  quay.io/crunchtools/gha-runner:latest \
+  quay.io/crunchtools/gha-runner:main \
   > "$XDG_RUNTIME_DIR/gha-token/regtoken" && \
   chmod 0600 "$XDG_RUNTIME_DIR/gha-token/regtoken"'
 
@@ -136,7 +136,7 @@ ExecStart=/usr/bin/podman run --rm --name gha-runner-uncached \
   --env-file /srv/gha-runner-uncached.crunchtools.com/config/gha-runner-uncached.env \
   -v /run/gha-runner-uncached/gha-token:/run/gha:U \
   --mount type=tmpfs,destination=/home/podman/.local/share/containers,tmpfs-size=16g,tmpfs-mode=0700,U=true \
-  quay.io/crunchtools/gha-runner:latest
+  quay.io/crunchtools/gha-runner:main
 ExecStop=/usr/bin/podman stop -t 90 gha-runner-uncached
 ExecStopPost=-/usr/bin/podman rm -f gha-runner-uncached
 
