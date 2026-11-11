@@ -1,0 +1,37 @@
+name: Container
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  # Weekly, so Fedora's security updates reach the runner without anyone
+  # remembering to push. The base is pinned by digest; the update comes from
+  # the Containerfile's `dnf -y upgrade`, which UPGRADE_STAMP forces past the
+  # layer cache. A CI runner executes repository code; a stale one is a liability.
+  schedule:
+    - cron: "30 4 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  container:
+    uses: crunchtools/constitution/.github/workflows/container-release.yml@v1.39.1
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      image: quay.io/crunchtools/gha-runner
+      build-args: |
+        UPGRADE_STAMP=${{ github.run_id }}
+      # The one property that makes this image usable is that a job can build
+      # AND run containers inside it, so the gate is the repo's own smoke test
+      # (runner version, docker shim, hook permissions, nested build, nested
+      # run), run against the pushed digest.
+      boot: command
+      boot-command: ENGINE=podman bash scripts/smoke-test.sh "$IMAGE"
+      boot-timeout: 600
+    secrets:
+      QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+      QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}

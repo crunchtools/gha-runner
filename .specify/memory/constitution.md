@@ -3,7 +3,7 @@
 > **Version:** 1.3.0
 > **Ratified:** 2026-11-03
 > **Status:** Active
-> **Inherits:** [crunchtools/constitution](https://github.com/crunchtools/constitution) v1.31.0
+> **Inherits:** [crunchtools/constitution](https://github.com/crunchtools/constitution) v1.39.1
 > **Profile:** Container Image
 
 The self-hosted GitHub Actions runner image, for any Crunchtools repository
@@ -63,7 +63,7 @@ what carries Fedora's fixes in.
 
 ## Where This Image Is Published
 
-`quay.io/crunchtools/gha-runner`, mirrored to `ghcr.io/crunchtools/gha-runner`.
+`quay.io/crunchtools/gha-runner` (Quay.io is the only registry).
 
 ## Containerfile Rules Particular To This Image
 
