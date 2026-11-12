@@ -3,7 +3,7 @@
 > **Version:** 1.3.0
 > **Ratified:** 2026-11-03
 > **Status:** Active
-> **Inherits:** [crunchtools/constitution](https://github.com/crunchtools/constitution) v1.40.0
+> **Inherits:** [crunchtools/constitution](https://github.com/crunchtools/constitution) v1.41.0
 > **Profile:** Container Image
 
 The self-hosted GitHub Actions runner image, for any Crunchtools repository
