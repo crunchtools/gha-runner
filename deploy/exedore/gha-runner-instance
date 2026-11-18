@@ -76,8 +76,8 @@ import_key() {
 }
 
 instance_vars() { # <class> <n>
-  case $1 in cached) slot=$2 ;; uncached) slot=$((10 + $2)) ;; *) die "class is cached or uncached" ;; esac
   [[ $2 =~ ^[1-9]$ ]] || die "N is 1..9"
+  case $1 in cached) slot=$2 ;; uncached) slot=$((10 + $2)) ;; *) die "class is cached or uncached" ;; esac
   inst=$1$2 name=gha-runner-$1$2 user=ghrunner-$1$2
   uid=$((2100 + slot)) sub=$((4000000 + slot * 65536)) cuid=$((4000000 + slot * 65536 + 999))
   store=$([ "$1" = cached ] && echo containers || echo scratch)
