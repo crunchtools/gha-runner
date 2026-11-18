@@ -23,6 +23,9 @@ All notable changes to this project are documented here. The format follows
   scratch is on disk rather than tmpfs. An nftables owner match keeps runner
   traffic off the host, the seats and the private networks.
   `gha-runner-instance` provisions an instance.
+- Constitution 1.5.0 lets an uncached runner keep its nested storage in a
+  host scratch directory of its own, emptied before and after every job, as
+  Exedore's do: a tmpfs there would be charged to the pool's memory.
 
 ### Fixed
 
