@@ -24,6 +24,9 @@ run_in_image() {
 echo "== the runner binary is the pinned version"
 run_in_image 'cd actions-runner && ./config.sh --version'
 
+echo "== gh, which Gatehouse's review, triage and retriage call"
+run_in_image 'gh --version | head -1'
+
 echo "== docker is shimmed to podman"
 run_in_image 'docker --version | grep -qi podman && echo "docker -> podman: ok"'
 

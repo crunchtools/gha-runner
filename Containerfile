@@ -70,6 +70,20 @@ RUN : "upgrade ${UPGRADE_STAMP}" \
 RUN printf '#!/bin/sh\nexec /usr/bin/podman "$@"\n' > /usr/local/bin/docker \
  && chmod 0755 /usr/local/bin/docker
 
+# gh: GitHub's hosted image ships it, and Gatehouse's review, triage and
+# retriage jobs call it for every API read and write (a281). Upstream's release,
+# not Fedora's package: Fedora's 2.97.0 is built with golang.org/x/net 0.56.0,
+# a fixable Critical (GO-2026-6612); 2.103.0 (2026-10-21) has 0.60.0. Pinned by
+# version and digest, like the runner below.
+ARG GH_VERSION=2.103.0
+ARG GH_SHA256=fdd768eb70f6409f80fcfa9f3a1c0adf0fc98d827ab3ce0bed2ac22762c5d786
+RUN curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 -o /tmp/gh.tar.gz \
+      "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.tar.gz" \
+ && echo "${GH_SHA256}  /tmp/gh.tar.gz" | sha256sum -c - \
+ && tar xzf /tmp/gh.tar.gz -C /tmp "gh_${GH_VERSION}_linux_amd64/bin/gh" \
+ && install -m 0755 "/tmp/gh_${GH_VERSION}_linux_amd64/bin/gh" /usr/local/bin/gh \
+ && rm -rf /tmp/gh.tar.gz "/tmp/gh_${GH_VERSION}_linux_amd64"
+
 # A job with `container:` or `services:` makes the runner itself call
 # `docker create ... -v /var/run/docker.sock:/var/run/docker.sock`, a path it
 # hardcodes, so without a socket there every such job dies in "Initialize

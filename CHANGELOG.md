@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`gh`.** GitHub's hosted image ships it, and Gatehouse's `review`, `triage`
+  and `retriage` jobs call it for every API read and write, so they can run
+  here (crunchtools/gatehouse, a281). Upstream's 2.103.0, pinned by version
+  and sha256: Fedora's 2.97.0 is built with a vulnerable `golang.org/x/net`.
+  The smoke test checks it.
+
 ### Fixed
 
 - **Jobs with `container:` or `services:` start.** The runner hardcodes
