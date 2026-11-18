@@ -72,11 +72,15 @@ echo "== a job container and a service container, as the runner starts them"
 # ContainerOperationProvider): one network, a service reachable by its alias,
 # and a job container with /var/run/docker.sock mounted, kept alive by tail.
 # Run with the entrypoint's podman API up, since that is what the socket serves.
+# A named network needs podman's rootless network namespace, which Ubuntu's
+# AppArmor (GitHub's runner, where this test runs) refuses to a nested podman;
+# the deployed host has no AppArmor, and podman ignores the option there.
 "$ENGINE" run --rm \
   --device /dev/fuse \
   --device /dev/net/tun \
   --security-opt label=disable \
   --security-opt seccomp=unconfined \
+  --security-opt apparmor=unconfined \
   --entrypoint /bin/bash "$IMAGE" -c '
 set -euo pipefail
 export XDG_RUNTIME_DIR=/home/podman/.runtime
