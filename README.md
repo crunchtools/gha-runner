@@ -121,6 +121,44 @@ hierarchy, so the cgroup sits under an implicit `gha.slice` rather than at
 systemd realizes it when the first unit in it starts — so checking before the
 service runs reports nothing, which is not the same as reporting a problem.
 
+## A shared, read-only image store
+
+Optional. Mount a warmed container store read-only at `/var/lib/shared` and
+every job reads the images in it without pulling, while its own writable
+storage stays as it was: the cached runner's layer cache, the uncached one's
+empty tmpfs. With nothing mounted the base image's empty skeleton is there and
+nothing changes.
+
+```
+-v /srv/gha-shared-images/store:/var/lib/shared:ro
+```
+
+The path is the base image's own: quay.io/podman/stable's
+`/etc/containers/storage.conf` already lists `/var/lib/shared` under
+`additionalimagestores`, for root and for the rootless `podman` user, so the
+image adds no config of its own. Warm the store with this image, as the user
+the runner runs as, so its layers carry the ownership the runner's podman reads:
+
+```bash
+podman run --rm --device /dev/fuse --security-opt label=disable \
+  -v /srv/gha-shared-images/store:/store:U \
+  --entrypoint podman quay.io/crunchtools/gha-runner:main \
+  --root /store pull <image>
+```
+
+Read-only is the point: a job can use an image from the store and cannot
+change, add or remove one, so nothing a job does reaches the next job through
+it. `scripts/smoke-test.sh` checks both halves before the image is published.
+
+## Job containers and services
+
+A job with `container:` or `services:` makes the runner call `docker create`
+with `-v /var/run/docker.sock:/var/run/docker.sock`, a path it hardcodes. That
+path links to the podman API the entrypoint serves, through the `docker` shim,
+so those jobs start here as they do on GitHub's machines. The socket gives a
+job container what any job's own steps already have here: podman as the runner
+user, in a container that is thrown away after the job.
+
 ## Which jobs reach it
 
 The consuming repository decides, by expression rather than by a setting

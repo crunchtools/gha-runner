@@ -15,6 +15,15 @@ All notable changes to this project are documented here. The format follows
   The smoke test replays the runner's network, service and job-container
   sequence before the image is published.
 
+### Added
+
+- **A shared, read-only image store.** Mount a warmed store read-only at
+  `/var/lib/shared`, the base image's own additional image store, and jobs run
+  its images without pulling while their own storage stays as it was. With no
+  mount nothing changes. The README says how to warm it; the smoke test checks
+  that an image only the store holds runs with `--pull=never` and that a job
+  cannot write to the store.
+
 ## [1.0.1] - 2026-11-11
 
 ### Changed

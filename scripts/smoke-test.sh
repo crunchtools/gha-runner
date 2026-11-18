@@ -101,4 +101,37 @@ docker rm -f smoke_job smoke_svc >/dev/null
 docker network rm smoke_net >/dev/null
 echo "job container and service: ok"'
 
+echo "== a read-only shared image store at /var/lib/shared"
+# Warmed by this image as its own user, the way the README says to warm it on
+# the host; then mounted read-only, as the deploy mounts it. An image only the
+# store holds must run without a pull, and the store must refuse a write.
+store=$(mktemp -d)
+trap 'rm -rf "$store" 2>/dev/null || "$ENGINE" unshare rm -rf "$store" 2>/dev/null || true' EXIT
+"$ENGINE" run --rm \
+  --device /dev/fuse \
+  --security-opt label=disable \
+  --security-opt seccomp=unconfined \
+  -v "$store":/store:U \
+  --entrypoint /bin/bash "$IMAGE" -c '
+set -euo pipefail
+podman --root /store pull -q registry.access.redhat.com/ubi10/ubi-micro:latest >/dev/null
+podman --root /store tag registry.access.redhat.com/ubi10/ubi-micro:latest localhost/only-in-store:smoke'
+"$ENGINE" run --rm \
+  --device /dev/fuse \
+  --security-opt label=disable \
+  --security-opt seccomp=unconfined \
+  -v "$store":/var/lib/shared:ro \
+  --entrypoint /bin/bash "$IMAGE" -c '
+set -euo pipefail
+podman run --rm --pull=never localhost/only-in-store:smoke /bin/true
+echo "image from the store, no pull: ok"
+if touch /var/lib/shared/overlay-images/written 2>/dev/null; then
+  echo "the shared store took a write" >&2; exit 1
+fi
+if podman rmi localhost/only-in-store:smoke >/dev/null 2>&1 \
+  && ! podman image exists localhost/only-in-store:smoke; then
+  echo "a job removed an image from the shared store" >&2; exit 1
+fi
+echo "store refuses writes: ok"'
+
 echo "== smoke test passed"
