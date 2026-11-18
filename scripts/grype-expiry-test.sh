@@ -23,6 +23,8 @@ expect 1 "ignore with no date"    2026-11-18 $'ignore:\n  - vulnerability: A\n'
 expect 1 "second entry undated"   2026-11-18 $'ignore:\n  - vulnerability: A\n  # EXPIRES 2026-12-18\n  - vulnerability: B\n'
 expect 1 "later date governs, past" 2026-12-02 $'# EXPIRES 2027-01-01\nignore:\n  - vulnerability: A\n  # EXPIRES 2026-12-01\n  - vulnerability: B\n'
 expect 1 "not a calendar date"    2026-11-18 $'# EXPIRES 2099-99-99\nignore:\n  - vulnerability: A\n'
+expect 1 "malformed later EXPIRES" 2026-11-18 $'# EXPIRES 2027-01-01\nignore:\n  - vulnerability: A\n  # EXPIRES soon\n  - vulnerability: B\n'
+expect 1 "EXPIRES with long year"  2026-11-18 $'# EXPIRES 2026-12-188\nignore:\n  - vulnerability: A\n'
 expect 0 "no ignores at all"      2026-11-18 $'# nothing ignored\n'
 expect 0 "no file"                2026-11-18 ''
 expect 2 "today not a date"       not-a-date "$one"

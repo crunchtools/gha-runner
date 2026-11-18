@@ -22,9 +22,14 @@ today=${2:-$(date -u +%F)}
 [ -r "$file" ] || { echo "::error::cannot read $file" >&2; exit 2; }
 
 # One line per ignore entry: "<line> <governing date or ->".
+# Any EXPIRES directive takes effect, well-formed or not: a malformed one makes
+# the entries under it fail rather than leaving an earlier date in force.
 entries=$(awk '
-  match($0, /EXPIRES [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/) {
-    date = substr($0, RSTART + 8, 10)
+  /(^|[^A-Za-z])EXPIRES([^A-Za-z]|$)/ {
+    if (match($0, /EXPIRES [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]([^0-9]|$)/))
+      date = substr($0, RSTART + 8, 10)
+    else
+      date = "malformed"
   }
   /^[[:space:]]*-[[:space:]]*vulnerability:/ { print NR, (date == "" ? "-" : date) }
 ' "$file")
