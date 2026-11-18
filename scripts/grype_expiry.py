@@ -47,18 +47,20 @@ def comments(text: str) -> list[tuple[int, str]]:
     """(line, comment text) for every YAML comment: a `#` at a line's start or
     after whitespace that lies outside every scalar, found with PyYAML's own
     scanner so `#` inside a quoted value is never mistaken for one."""
-    scalars = [
+    scalars = sorted(
         (token.start_mark.index, token.end_mark.index)
         for token in yaml.scan(text)
         if isinstance(token, yaml.ScalarToken)
-    ]
+    )
+    starts = [start for start, _ in scalars]
     found = []
     offset = 0
     for number, line in enumerate(text.splitlines(keepends=True), start=1):
         for column, char in enumerate(line):
             at = offset + column
             if char == "#" and (column == 0 or line[column - 1].isspace()):
-                if not any(start <= at < end for start, end in scalars):
+                index = bisect.bisect_right(starts, at) - 1  # scalars never overlap
+                if index < 0 or not at < scalars[index][1]:
                     found.append((number, line[column:].rstrip("\n")))
                     break
         offset += len(line)
