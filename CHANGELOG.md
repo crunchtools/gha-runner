@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Exedore unit templates match what runs there** (a315). After the libssl
+  outage, the deployed `gha-runner-{cached,uncached}@.service` run
+  `quay.io/crunchtools/gha-runner@sha256:9f8aa398…` (1.1.1) with
+  `--pull=missing` instead of `:main` with `--pull=newer`, so a merge no longer
+  reaches the pool by itself. The repo copies now say the same.
+  `deploy/exedore/README.md` "Promoting a new image" gives the steps: verify
+  by digest, canary one uncached runner, then sed and reload.
+  `scripts/deploy-units-test.sh`, run by `deploy-units-test.yml`, fails if
+  either template names `:main` or `--pull=newer`, or if the templates pin
+  different digests.
+
 ## [1.1.1] - 2026-11-18
 
 ### Added

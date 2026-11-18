@@ -1,0 +1,37 @@
+# deploy/exedore's runner units must run an image pinned by digest (a315): a
+# merged :main pulled with --pull=newer is how one bad merge took down every
+# Exedore runner. scripts/deploy-units-test.sh needs only bash and grep, so it
+# runs on the runner itself.
+
+name: deploy units
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: deploy units pinned
+    # constitution#160's routing: same-repo, non-Dependabot pull requests on
+    # our cached runner; push and manual runs on the uncached one; anything
+    # else on GitHub's machines.
+    runs-on: >-
+      ${{ github.event_name == 'pull_request'
+          && github.event.pull_request.head.repo.full_name == github.repository
+          && github.event.pull_request.user.login != 'dependabot[bot]'
+          && (vars.CACHED_RUNNER_LABEL || 'ubuntu-latest')
+          || contains(fromJSON('["push","workflow_dispatch"]'), github.event_name)
+          && !startsWith(github.ref, 'refs/heads/dependabot/')
+          && (vars.UNCACHED_RUNNER_LABEL || 'ubuntu-latest')
+          || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Both runner units pin the image by digest
+        run: bash scripts/deploy-units-test.sh

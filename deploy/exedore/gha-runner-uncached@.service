@@ -43,11 +43,11 @@ RestartSec=5
 ExecStartPre=-/usr/bin/podman rm -f gha-runner-uncached%i
 ExecStartPre=/usr/bin/podman unshare sh -c 'find /var/mnt/onsite/gha-runner-cache/uncached%i/scratch -mindepth 1 -delete'
 ExecStartPre=/bin/sh -c 'install -d -m 0700 "$XDG_RUNTIME_DIR/gha-token" && \
-  /usr/bin/podman run --rm --pull=newer --name gha-runner-uncached%i-mint \
+  /usr/bin/podman run --rm --pull=missing --name gha-runner-uncached%i-mint \
   --env-file /srv/gha-runner/config/gha-runner-uncached.env \
   -v /run/srv-secrets/gha-runner-uncached%i/gha-app.pem:/run/secrets/gha-app.pem:ro \
   --entrypoint /usr/local/bin/mint-registration-token.sh \
-  quay.io/crunchtools/gha-runner:main \
+  quay.io/crunchtools/gha-runner@sha256:9f8aa398d3d49de17ce4da6b9d102d947c22e5c078596fa84b2cf6a64d591b6b \
   > "$XDG_RUNTIME_DIR/gha-token/regtoken" && \
   chmod 0600 "$XDG_RUNTIME_DIR/gha-token/regtoken"'
 
@@ -64,7 +64,7 @@ ExecStart=/usr/bin/podman run --rm --name gha-runner-uncached%i \
   -e GHA_RUNNER_NAME=exedore-uncached%i \
   -v /run/gha-runner-uncached%i/gha-token:/run/gha:U \
   -v /var/mnt/onsite/gha-runner-cache/uncached%i/scratch:/home/podman/.local/share/containers \
-  quay.io/crunchtools/gha-runner:main
+  quay.io/crunchtools/gha-runner@sha256:9f8aa398d3d49de17ce4da6b9d102d947c22e5c078596fa84b2cf6a64d591b6b
 # `-`: after an ephemeral job the container has already exited, and a failed
 # stop would mark the unit failed on every job.
 ExecStop=-/usr/bin/podman stop -t 90 gha-runner-uncached%i
