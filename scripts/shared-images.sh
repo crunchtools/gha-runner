@@ -22,25 +22,22 @@ if [ ! -d "$store" ]; then
 fi
 
 conf=${XDG_CONFIG_HOME:-$HOME/.config}/containers/storage.conf
-base=/etc/containers/storage.conf
 mkdir -p "$(dirname "$conf")"
-# A user storage.conf replaces the system one for this user, so start from the
-# base image's own and change only what the store needs (constitution: the base
-# is not re-declared here). graphroot and runroot are dropped: rootless podman
-# must keep its own defaults under $HOME, which is where the layer cache lives.
-# The store goes first in additionalimagestores; force_mask goes in, and
-# mount_program too in case a future base drops it.
-{
-  echo "# Written by shared-images.sh from $base because GHA_SHARED_IMAGES is set."
-  sed -e '/^[[:space:]]*\(graphroot\|runroot\|force_mask\)[[:space:]]*=/d' \
-      -e "s|^\([[:space:]]*additionalimagestores[[:space:]]*=[[:space:]]*\[\)|\1\n\"$store\",|" \
-      -e '/^\[storage\.options\.overlay\]/a force_mask = "shared"' \
-      "$base"
-} > "$conf"
-grep -q "^\"$store\"," "$conf" \
-  || { echo "shared-images.sh: $base has no additionalimagestores to extend" >&2; exit 1; }
-grep -q '^force_mask = "shared"' "$conf" \
-  || { echo "shared-images.sh: $base has no [storage.options.overlay] table" >&2; exit 1; }
-grep -q '^[[:space:]]*mount_program[[:space:]]*=' "$conf" \
-  || sed -i '/^\[storage\.options\.overlay\]/a mount_program = "/usr/bin/fuse-overlayfs"' "$conf"
+# Exactly what Exedore verified, and nothing from /etc/containers/storage.conf.
+# That file is the base's ROOTFUL config: the rootless runner user never reads
+# it (podman info: overlay, no options), and copying it in breaks rootless
+# podman, which cannot open the root-owned stores it lists
+# (/usr/lib/containers/storage/overlay-images/images.lock: permission denied).
+cat > "$conf" <<CONF
+# Written by shared-images.sh because GHA_SHARED_IMAGES is set.
+[storage]
+driver = "overlay"
+
+[storage.options]
+additionalimagestores = ["$store"]
+
+[storage.options.overlay]
+mount_program = "/usr/bin/fuse-overlayfs"
+force_mask = "shared"
+CONF
 echo "shared image store: $store (read-only, fuse-overlayfs)"

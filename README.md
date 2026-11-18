@@ -132,10 +132,11 @@ Opt-in, per runner. Mount a warmed store read-only and name it in the env file:
 GHA_SHARED_IMAGES=/var/lib/shared-images
 ```
 
-At start, `shared-images.sh` writes the podman user's `storage.conf` from the
-base image's own, with that path first under `additionalimagestores` and
-`force_mask = "shared"` on its fuse-overlayfs; graphroot and runroot stay the
-rootless defaults. That is what Exedore measured working: the store's
+At start, `shared-images.sh` writes the podman user's `storage.conf`: overlay,
+that path under `additionalimagestores`, fuse-overlayfs with
+`force_mask = "shared"`, and nothing else, so graphroot and runroot stay the
+rootless defaults. The base's `/etc/containers/storage.conf` is its rootful
+config, which the rootless runner user never reads. That is what Exedore measured working: the store's
 files are 0700 under an id the runner's user namespace does not map, which
 native overlay can neither read nor copy up from. Jobs then run the store's
 images without pulling and keep their own writable storage. fuse-overlayfs is
