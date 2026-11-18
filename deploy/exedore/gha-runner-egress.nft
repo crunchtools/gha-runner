@@ -21,5 +21,10 @@ table inet gha_runner_egress {
 		fib daddr type local counter reject
 		ip daddr { 127.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16 } counter reject
 		ip6 daddr { ::1/128, fc00::/7, fe80::/10, 2600:1702:5870:f50::/64 } counter reject
+		# Multicast and broadcast reach the LAN too (mDNS, SSDP). Matched on the uid
+		# again because the kernel's own IGMP reports carry no socket and fall through
+		# the first rule; they must still go out.
+		meta skuid 2100-2199 ip daddr { 224.0.0.0/4, 255.255.255.255 } counter reject
+		meta skuid 2100-2199 ip6 daddr ff00::/8 counter reject
 	}
 }

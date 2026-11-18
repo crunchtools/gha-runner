@@ -34,9 +34,9 @@ AppRole, so an escape from one instance reaches neither another's cache nor its 
   never tmpfs, because tmpfs is charged to the slice's memory.
 - Network: runner users (uids 2100-2199) cannot reach the host (loopback, so
   OpenBao, and every local address), the seats' bridge 10.88/16, WireGuard,
-  or the LAN. The LAN resolver is the one exception, for DNS only. If DHCP
-  changes the resolver, runners lose DNS and fail closed; update the two
-  accept lines.
+  or the LAN, multicast and broadcast included. The LAN resolver is the one
+  exception, for DNS only. If DHCP changes the resolver, runners lose DNS and
+  fail closed; update the two accept lines.
 
 ## Scale
 
