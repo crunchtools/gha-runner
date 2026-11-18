@@ -10,8 +10,8 @@ Before=slices.target
 [Slice]
 # 16 of 24 cores; the seats keep at least 8.
 CPUQuota=1600%
-MemoryHigh=16G
-MemoryMax=18G
+MemoryHigh=22G
+MemoryMax=24G
 CPUWeight=50
 IOWeight=50
 TasksMax=16384

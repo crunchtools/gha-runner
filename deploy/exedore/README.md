@@ -20,11 +20,11 @@ AppRole, so an escape from one instance reaches neither another's cache nor its 
 
 ## Limits
 
-- Slice: `CPUQuota=1600%`, `MemoryHigh=16G`, `MemoryMax=18G`; `gha.slice` has
+- Slice: `CPUQuota=1600%`, `MemoryHigh=22G`, `MemoryMax=24G`; `gha.slice` has
   `CPUWeight=50`/`IOWeight=50` against the seats' `system.slice` at 100. That is
   the parent where the weight actually competes. Check it:
   `cat /sys/fs/cgroup/gha.slice/gha-runner.slice/{cpu.max,memory.max} /sys/fs/cgroup/gha.slice/cpu.weight`
-  should print `1600000 100000`, `19327352832` and `50`.
+  should print `1600000 100000`, `25769803776` and `50`.
 - No per-job caps (no `SDLC_CPUS`/`SDLC_MEMORY`), by decision: the slice is the
   only limit. Under saturation the OOM killer acts inside the slice and kills a
   job, never a seat.
