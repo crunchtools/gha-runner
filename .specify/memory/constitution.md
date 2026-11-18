@@ -72,9 +72,11 @@ what carries Fedora's fixes in.
 - The base's `containers.conf`, storage config and `BUILDAH_ISOLATION=chroot`
   are NOT re-declared. They are why this base was chosen, and a local copy
   would drift from it. One exception: a later rootless storage drop-in,
-  `30-gha-runner.conf`, overrides only the keys of the base's
-  `20-image_build.conf` that would put every job on fuse-overlayfs, keeping the
-  runner on native overlay. The build fails if the base stops shipping the file
+  `30-gha-runner.conf`, overrides the base's `20-image_build.conf` back to what
+  podman 5 gave the runner user: native overlay (no `mount_program`, no
+  `fsync=0`) and no additional image store, since the base's
+  `/var/lib/shared` is root-owned build-time state, not something a job should
+  read. The build fails if the base stops shipping the file
   it overrides.
 - Runs as uid 1000 with the base's own subuid ranges, which the nesting needs.
 
