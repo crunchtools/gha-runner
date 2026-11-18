@@ -95,6 +95,22 @@ grep -q "ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/usr/local/bin/job-completed.sh" \
   || { echo "image entrypoint is not the installed one" >&2; exit 1; }
 echo "image entrypoint: ok"
 
+# a358: Red Hat images must still be signature-checked, not merely pullable.
+# The shipped policy has to accept ubi10-minimal, and the same policy with the
+# wrong key has to reject it -- proof the check runs rather than passing open.
+echo "== Red Hat images are verified (release3 sigstore signature)"
+run_in_image 'set -euo pipefail
+skopeo copy -q docker://registry.access.redhat.com/ubi10/ubi-minimal:latest dir:/tmp/ok
+echo "verified pull with the shipped policy: ok"
+sed "s#/etc/pki/sigstore/SIGSTORE-redhat-release3#/etc/pki/sigstore/REKOR-signing-key#" \
+  /etc/containers/policy.json > /tmp/wrong-key.json
+if skopeo --policy /tmp/wrong-key.json copy -q \
+    docker://registry.access.redhat.com/ubi10/ubi-minimal:latest dir:/tmp/bad 2>/tmp/err; then
+  echo "a policy naming the wrong key accepted the image: verification is not running" >&2; exit 1
+fi
+grep -q "Source image rejected" /tmp/err || { cat /tmp/err >&2; exit 1; }
+echo "wrong key rejected: ok"'
+
 echo "== nested BUILD"
 run_in_image 'podman build -q -t smoke:build -f - /tmp <<CF
 FROM registry.access.redhat.com/ubi10/ubi-minimal:latest

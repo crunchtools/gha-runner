@@ -133,6 +133,21 @@ RUN printf '%s\n' \
       > /etc/containers/storage.rootless.conf.d/30-gha-runner.conf \
  && test -f /etc/containers/storage.rootless.conf.d/20-image_build.conf
 
+# Signature policy (a358). containers-common's /usr/share/containers/policy.json
+# requires Red Hat's release3 sigstore signature AND a Rekor SET checked against
+# /etc/pki/sigstore/REKOR-signing-key (logID ca942090...). On 2026-11-18 Red Hat
+# began logging new signatures in a Rekor log with logID 1231502a..., a key no
+# package ships yet (not Fedora's containers-common 0.70.0, not RHEL 10.3's
+# redhat-release-10.3-15), so every freshly signed ubi10 image was rejected.
+# This keeps the release3 signature mandatory and drops only the Rekor SET
+# requirement. When Red Hat publishes the new Rekor key, ship it and restore
+# "rekorPublicKeyPaths": [old, new] (any one verifies; c/image >= 5.33).
+# /etc wins over /usr/share, so a containers-common update cannot undo this.
+COPY containers/policy.json /etc/containers/policy.json
+RUN chmod 0644 /etc/containers/policy.json \
+ && python3 -c 'import json; p=json.load(open("/etc/containers/policy.json"))["transports"]["docker"]; assert all(p[r][0]["type"]=="sigstoreSigned" and p[r][0]["keyPath"]=="/etc/pki/sigstore/SIGSTORE-redhat-release3" for r in ("registry.access.redhat.com","registry.redhat.io"))' \
+ && test -s /etc/pki/sigstore/SIGSTORE-redhat-release3
+
 # uid 1000, with the base's own carefully-laid-out subuid ranges for nesting.
 USER 1000
 WORKDIR /home/podman
