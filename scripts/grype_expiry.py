@@ -128,6 +128,13 @@ def check(path: Path, name: str, today: datetime.date) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
+    """Check every grype config under a repo root, as the command line does.
+
+    `argv` is `[program, root, today]`, the last two optional (root ".", today
+    UTC now). Returns 0 when every ignore is dated and current, 1 on any
+    finding, and 2 when the check could not run (a bad `today`, an unreadable
+    file).
+    """
     root = Path(argv[1]) if len(argv) > 1 else Path(".")
     today = calendar_date(argv[2]) if len(argv) > 2 else datetime.datetime.now(datetime.UTC).date()
     if today is None:
