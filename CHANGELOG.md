@@ -55,6 +55,13 @@ All notable changes to this project are documented here. The format follows
 - Constitution 1.4.0 permits that mount and says what the docker.sock link
   grants.
 
+### Removed
+
+- Gloval's deploy files (`deploy/gha-runner-{cached,uncached}.crunchtools.com.service`,
+  their `.env.example` files and `deploy/gha-runner.slice`). Scott retired both
+  gloval runners (a279), and the host side is gone, so the README's gloval
+  layout and install steps and `deploy/exedore`'s gloval rollback go with them.
+
 ## [1.0.1] - 2026-11-11
 
 ### Changed

@@ -36,63 +36,30 @@ base cannot work at all here: those images have no shell, and every Actions
 
 ## Two deployments: cached and uncached
 
-The pool now runs on exedore: four cached and two uncached instances in the
-`exedore` runner group. Its units, fence, storage and runbook are in
-[deploy/exedore](deploy/exedore/README.md). Gloval's two units, described
-below, are disabled but kept for rollback.
+The pool runs on exedore: four cached and two uncached instances in the
+`exedore` runner group, one rootless user and one OpenBao AppRole each. Its
+units, egress fence, storage and runbook are in
+[deploy/exedore](deploy/exedore/README.md). Gloval's original two units were
+retired (a279) and their deploy files removed; git history keeps them.
 
-The same image runs as two units on gloval, named for what they do:
-
-| Unit | User | Label | Container storage | Takes |
-|---|---|---|---|---|
-| `gha-runner-cached.crunchtools.com` | `ghrunner-cached` | `crunchtools-cached` | persistent bind mount: the layer cache | our pull requests |
-| `gha-runner-uncached.crunchtools.com` | `ghrunner-uncached` | `crunchtools-uncached` | 16g tmpfs, empty every job | pushes to `main`: the build that gets published |
+| Kind | Label | Container storage | Takes |
+|---|---|---|---|
+| `gha-runner-cached@1..4` | `crunchtools-cached` | persistent: the layer cache | our pull requests |
+| `gha-runner-uncached@1..2` | `crunchtools-uncached` | scratch, empty every job | pushes to `main`: the build that gets published |
 
 The cache is what makes the cached runner fast, and it is also why nothing it
 builds may be published: every job it runs can write to that storage, and podman
-reuses an extracted layer without re-hashing it. Both runners register
-`--ephemeral`, take one job and exit, so no process or runner file outlives its
-job; the cached one keeps only its layer cache. The uncached runner's storage is
-a tmpfs inside the container, so its next job starts from nothing. Separate
-users keep the two stores apart.
+reuses an extracted layer without re-hashing it. Every runner registers
+`--ephemeral`, takes one job and exits, so no process or runner file outlives
+its job; a cached one keeps only its layer cache. An uncached runner's scratch
+is emptied between jobs, so its next job starts from nothing. Separate users
+keep the stores apart.
 
-Each unit's files go to its own `/srv/<unit>/config/`:
-
-```
-/srv/gha-runner-cached.crunchtools.com/
-├── config/   # gha-runner-cached.env, the .service and .slice
-└── data/
-    └── containers/   # nested container storage: the layer cache. A CACHE --
-                      # exclude it from backups.
-/srv/gha-runner-uncached.crunchtools.com/
-└── config/   # gha-runner-uncached.env and the .service; it keeps no data
-```
-
-The units and the shared slice are installed from `config/` to
-`/etc/systemd/system/`, so git in `/srv` stays the source of truth and the drift
-checks can see it:
-
-```bash
-install -m 0644 /srv/gha-runner-cached.crunchtools.com/config/gha-runner.slice /etc/systemd/system/
-for u in gha-runner-cached gha-runner-uncached; do
-  install -m 0644 /srv/$u.crunchtools.com/config/$u.crunchtools.com.service /etc/systemd/system/
-done
-systemctl daemon-reload
-systemctl enable --now gha-runner-cached.crunchtools.com gha-runner-uncached.crunchtools.com
-```
-
-The GitHub App private key is a **podman secret**, not a file in `config/`:
-
-```bash
-podman secret create gha-app-key /path/to/app-private-key.pem   # as each runner user
-```
-
-Podman secrets are per user, so each runner user holds its own copy. Both
-runners mint a registration token on every start.
+Each runner mints a registration token on every start.
 
 The App, `gha-runner.crunchtools.com`, holds one permission: **Organization >
 Self-hosted runners: Read and write**. Runners register to the crunchtools org,
-in the `gloval` runner group. Which repositories may use them is that group's
+in the `exedore` runner group. Which repositories may use them is that group's
 setting (org settings > Actions > Runner groups); which jobs land on them is each
 repository's `runs-on`. Adding a repository is a runner-group change plus its
 own `runs-on`, not a new deployment. `GHA_REPO` still works for a runner that
@@ -179,7 +146,7 @@ runs-on: >-
       || 'ubuntu-latest' }}
 ```
 
-A fork's pull request never executes on gloval. Neither does a Dependabot pull
+A fork's pull request never executes on our runners. Neither does a Dependabot pull
 request: its job runs the new release of a third-party package, and that is not
 code we want writing to the cached runner's storage. Pushes and scheduled runs
 go to the uncached runner, so the image that gets published comes from storage

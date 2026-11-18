@@ -3,7 +3,7 @@
 Six ephemeral runners in the org runner group `exedore` (visibility: all repos,
 public allowed): `gha-runner-cached@1..4` (label `crunchtools-cached`) and
 `gha-runner-uncached@1..2` (label `crunchtools-uncached`). Same image and
-two-container mint as gloval's; the unit headers say what differs.
+two-container mint as the retired gloval pair; the unit headers say what differs.
 
 | Piece | Where |
 |---|---|
@@ -78,12 +78,9 @@ Fork-PR workflows need approval from all external contributors
 workflows. Check it with
 `gh api orgs/crunchtools/actions/permissions/fork-pr-contributor-approval`.
 
-## Gloval rollback
+## No rollback to gloval
 
-Gloval's two runners were disabled on 2026-11-18. The units, config and data
-stay in place. To bring them back, run
-`ssh gloval systemctl enable --now gha-runner-cached.crunchtools.com gha-runner-uncached.crunchtools.com`.
-They re-register on start, but only into a runner group named `gloval`, which
-must exist first:
-`gh api -X POST orgs/crunchtools/actions/runner-groups -f name=gloval -f visibility=all -F allows_public_repositories=true`.
-Alternatively, set their `GHA_RUNNER_GROUP=exedore`.
+Gloval's two runners were disabled on 2026-11-18 and retired on Scott's order
+(a279): their units, slice, `/srv` directories, image and monitoring are gone,
+so exedore is the only pool. Rebuilding on another host means starting from
+this directory, not reviving gloval's units.
