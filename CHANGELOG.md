@@ -23,6 +23,8 @@ All notable changes to this project are documented here. The format follows
   mount nothing changes. The README says how to warm it; the smoke test checks
   that an image only the store holds runs with `--pull=never` and that a job
   cannot write to the store.
+- Constitution 1.4.0 permits that mount and says what the docker.sock link
+  grants.
 
 ## [1.0.1] - 2026-11-11
 

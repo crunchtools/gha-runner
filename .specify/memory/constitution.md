@@ -1,6 +1,6 @@
 # gha-runner Constitution
 
-> **Version:** 1.3.0
+> **Version:** 1.4.0
 > **Ratified:** 2026-11-03
 > **Status:** Active
 > **Inherits:** [crunchtools/constitution](https://github.com/crunchtools/constitution) v1.46.0
@@ -97,7 +97,11 @@ what carries Fedora's fixes in.
   has registered (a DIRECTORY rather than a podman secret because a secret
   mount is read-only and that unlink has to be real); and, on the uncached
   runner only, the nested container storage, capped in size and charged to the
-  slice like the job itself.
+  slice like the job itself. Optionally, on either runner, one shared image
+  store mounted READ-ONLY at `/var/lib/shared`, the base image's own
+  additional image store: jobs read images from it and cannot write, add or
+  remove one, so it carries nothing from one job to the next. With it absent
+  nothing changes.
 - **Ephemeral registration, one job per container, on both.** A registration
   token is minted per container start by a separate short-lived container that
   alone holds the GitHub App private key; the runner registers `--ephemeral`,
@@ -121,8 +125,11 @@ what carries Fedora's fixes in.
 - No registry credential and no production secret is ever mounted.
 - A podman API socket is served inside the container, because tools that
   INSPECT an image rather than run one — Trivy — reach the engine that way and
-  otherwise cannot find the image the job just built. It grants what a job in
-  this container already has and no more.
+  otherwise cannot find the image the job just built. `/var/run/docker.sock`
+  links to it, because the runner mounts that hardcoded path into a job's
+  `container:` and `services:`, which cannot start without it. It grants what a
+  job in this container already has — podman as the job user, in a container
+  thrown away after the job — and no more, to a step or a job container alike.
 
 ## The Test That Decides This Image
 

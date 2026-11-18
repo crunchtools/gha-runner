@@ -1,0 +1,9 @@
+# Gatehouse findings judged by a person or a seat, with the reason.
+
+[[findings]]
+agent = "security"
+category = "security"
+file = "Containerfile"
+evidence = "RUN ln -sfn /home/podman/.runtime/podman/podman.sock /run/docker.sock \\\n && test \"$(readlink -f /var/run)\" = /run"
+status = "not-a-bug"
+reason = "Every job's own steps already run as this uid with full podman and the same API socket (served for Trivy); a job container gets no more. The runner is ephemeral, one job per container, holding no durable credential (constitution: ephemeral registration), as GitHub-hosted runners hand job containers docker.sock."
