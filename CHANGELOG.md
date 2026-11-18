@@ -19,7 +19,8 @@ All notable changes to this project are documented here. The format follows
   The file is parsed as YAML, so every `ignore:` entry counts, whatever it
   matches on (`vulnerability`, `package`, `fix-state`) and in block or flow
   style. Each is governed by the nearest `EXPIRES` at or above it; one with
-  none, or under a malformed or impossible date, fails. `.grype.yml` and
+  none, under a malformed or impossible date, or dated more than 90 days
+  out, fails. `.grype.yml` and
   `.grype/config.yaml`, which grype also loads, fail by existing
   (`scripts/grype_expiry.py`, tested by `scripts/test_grype_expiry.py`).
 

@@ -28,6 +28,12 @@ class GrypeExpiry(unittest.TestCase):
         self.assertEqual(self.run_on({".grype.yaml": DATED}, "2026-12-18"), 0)
         self.assertEqual(self.run_on({".grype.yaml": DATED}, "2026-12-19"), 1)
 
+    def test_dates_past_the_horizon_fail(self) -> None:
+        far = "# EXPIRES 2027-02-16\nignore:\n  - vulnerability: A\n"
+        self.assertEqual(self.run_on({".grype.yaml": far}), 0)
+        self.assertEqual(self.run_on({".grype.yaml": far.replace("02-16", "02-17")}), 1)
+        self.assertEqual(self.run_on({".grype.yaml": far.replace("2027-02-16", "2099-01-01")}), 1)
+
     def test_every_entry_needs_a_date(self) -> None:
         self.assertEqual(self.run_on({".grype.yaml": "ignore:\n  - vulnerability: A\n"}), 1)
         late = "ignore:\n  - vulnerability: A\n  # EXPIRES 2026-12-18\n  - vulnerability: B\n"

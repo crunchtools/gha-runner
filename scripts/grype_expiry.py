@@ -12,6 +12,8 @@ matches on (`vulnerability`, `package`, `fix-state`) and however it is written
 its first line, so one header date can cover the entries under it. An entry
 with no EXPIRES above it, or under one whose date is malformed or not a real
 calendar date, fails: the number of entries must equal the number of dated ones.
+So does a date more than 90 days out: the horizon keeps the date honest without
+anyone having to review it, since a 2099 would otherwise mean "never".
 
 grype also auto-loads `.grype.yml` and `.grype/config.yaml`; ignores there would
 escape review here, so their existence fails too (and they are checked).
@@ -32,6 +34,7 @@ PRIMARY = ".grype.yaml"
 CANDIDATES = (PRIMARY, ".grype.yml", ".grype/config.yaml", ".grype/config.yml")
 DIRECTIVE = re.compile(r"(?<![A-Za-z])EXPIRES(?![A-Za-z])")
 DATE = re.compile(r"EXPIRES (\d{4}-\d{2}-\d{2})(?=\s|$)")
+HORIZON = datetime.timedelta(days=90)
 
 
 def calendar_date(text: str) -> datetime.date | None:
@@ -105,7 +108,7 @@ def entry_lines(text: str) -> list[int]:
 def check(path: Path, name: str, today: datetime.date) -> list[str]:
     """Judge one grype config: `path` to read, `name` to report it as, `today` to
     compare against. Prints each current entry; returns one message per entry
-    that is undated, malformed or expired. Raises OSError if unreadable, and
+    that is undated, malformed, expired or dated past the horizon. Raises OSError if unreadable, and
     yaml.YAMLError or ValueError if it is not a config this can judge.
     """
     text = path.read_text()
@@ -122,6 +125,8 @@ def check(path: Path, name: str, today: datetime.date) -> list[str]:
             errors.append(f"{name}:{line}: the EXPIRES governing this ignore has no valid YYYY-MM-DD date")
         elif day < today:
             errors.append(f"{name}:{line}: this grype ignore expired on {day}; fix or re-justify it")
+        elif day > today + HORIZON:
+            errors.append(f"{name}:{line}: EXPIRES {day} is more than {HORIZON.days} days out; date it sooner")
         else:
             print(f"{name}:{line} expires {day}")
     return errors
