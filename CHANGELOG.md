@@ -13,6 +13,10 @@ All notable changes to this project are documented here. The format follows
   here (crunchtools/gatehouse, a281). Upstream's 2.103.0, pinned by version
   and sha256: Fedora's 2.97.0 is built with a vulnerable `golang.org/x/net`.
   The smoke test checks it.
+- **grype ignores expire.** grype's rules have no expiry field, so each
+  `.grype.yaml` ignore carries an `EXPIRES YYYY-MM-DD` comment, and
+  `grype-expiry.yml` fails on every change and daily once one has passed, or
+  if an ignore has no date at all (`scripts/grype-expiry.sh`).
 
 ### Fixed
 

@@ -1,0 +1,39 @@
+# grype's ignore rules have no expiry field, so .grype.yaml carries
+# `EXPIRES YYYY-MM-DD` comments and this makes them bind. Daily as well as on
+# every change: an ignore that outlives its date turns main red even when
+# nobody touches the repo.
+
+name: Grype ignore expiry
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  expiry:
+    name: grype ignores not expired
+    # constitution#160's routing: same-repo, non-Dependabot pull requests on
+    # our cached runner; push, schedule and manual runs on the uncached one;
+    # anything else on GitHub's machines.
+    runs-on: >-
+      ${{ github.event_name == 'pull_request'
+          && github.event.pull_request.head.repo.full_name == github.repository
+          && github.event.pull_request.user.login != 'dependabot[bot]'
+          && (vars.CACHED_RUNNER_LABEL || 'ubuntu-latest')
+          || contains(fromJSON('["push","schedule","workflow_dispatch"]'), github.event_name)
+          && !startsWith(github.ref, 'refs/heads/dependabot/')
+          && (vars.UNCACHED_RUNNER_LABEL || 'ubuntu-latest')
+          || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: No .grype.yaml ignore is past its EXPIRES date
+        run: scripts/grype-expiry.sh .grype.yaml
