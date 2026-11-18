@@ -48,6 +48,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **The runner starts on the podman 6 base** (a300). Fedora 45's
+  `openssl-libs` is OpenSSL 4 (`libssl.so.4`) and the runner's .NET probes only
+  for `libssl.so.3` and older, so `Runner.Listener` aborted on its first HTTPS
+  call ("No usable version of libssl was found", exit 134) and every Exedore
+  runner crash-looped until the units were pinned back to sha-ee3cb4d. The
+  image now installs Fedora's `openssl3-libs`. The smoke test registers with a
+  bogus token, which takes the runner through a real TLS round trip to GitHub
+  and fails on anything but an HTTP status coming back; `--version` never
+  loaded libssl, which is how #33 passed.
 - **Jobs with `container:` or `services:` start.** The runner hardcodes
   `-v /var/run/docker.sock:/var/run/docker.sock` for them, and no socket was
   there, so they failed in "Initialize containers" (crunchtools/gatehouse#153).
