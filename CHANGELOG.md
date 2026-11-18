@@ -15,8 +15,10 @@ All notable changes to this project are documented here. The format follows
   The smoke test checks it.
 - **grype ignores expire.** grype's rules have no expiry field, so each
   `.grype.yaml` ignore carries an `EXPIRES YYYY-MM-DD` comment, and
-  `grype-expiry.yml` fails on every change and daily once one has passed, or
-  if an ignore has no date at all (`scripts/grype-expiry.sh`).
+  `grype-expiry.yml` fails on every change and daily once one has passed.
+  Each ignore is governed by the nearest `EXPIRES` above it; an ignore with
+  none, or under a date that is not a real one, fails too
+  (`scripts/grype-expiry.sh`, tested by `scripts/grype-expiry-test.sh`).
 
 ### Fixed
 
