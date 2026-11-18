@@ -27,6 +27,24 @@ run_in_image 'cd actions-runner && ./config.sh --version'
 echo "== gh, which Gatehouse's review, triage and retriage call"
 run_in_image 'gh --version | head -1'
 
+# What jobs held on GitHub's machines need (a283). The libraries are the ones
+# puppeteer's Chrome links beyond this base, from ldd on Chrome for Testing 158.
+echo "== shellcheck, pip, and Chrome's shared libraries"
+run_in_image 'set -euo pipefail
+shellcheck --version | sed -n 2p
+python3 -m pip --version
+missing=
+for lib in libnss3.so libnssutil3.so libsmime3.so libnspr4.so libatk-1.0.so.0 \
+    libatk-bridge-2.0.so.0 libcups.so.2 libdbus-1.so.3 libdrm.so.2 libgbm.so.1 \
+    libpango-1.0.so.0 libcairo.so.2 libasound.so.2 libexpat.so.1 libX11.so.6 \
+    libxcb.so.1 libXcomposite.so.1 libXdamage.so.1 libXext.so.6 libXfixes.so.3 \
+    libXrandr.so.2 libxkbcommon.so.0 libudev.so.1; do
+  /sbin/ldconfig -p | grep -q "^[[:space:]]*$lib " || missing="$missing $lib"
+done
+[ -z "$missing" ] || { echo "missing:$missing" >&2; exit 1; }
+fc-list | grep -q . || { echo "no fonts" >&2; exit 1; }
+echo "Chrome libraries and a font: ok"'
+
 echo "== docker is shimmed to podman"
 run_in_image 'docker --version | grep -qi podman && echo "docker -> podman: ok"'
 
@@ -136,13 +154,21 @@ docker rm -f smoke_job smoke_svc >/dev/null
 docker network rm smoke_net >/dev/null
 echo "job container and service on a named network: ok"'
 
-echo "== GHA_SHARED_IMAGES unset or missing: storage.conf untouched"
+# podman 6 reads the base's 20-image_build.conf, which would put every job on
+# fuse-overlayfs with fsync=0; the image's 30-gha-runner.conf must win.
+echo "== GHA_SHARED_IMAGES unset or missing: native overlay, no drop-in written"
 run_in_image 'set -euo pipefail
-conf=$HOME/.config/containers/storage.conf
+dir=$HOME/.config/containers/storage.conf.d
 /usr/local/bin/shared-images.sh
-test ! -e "$conf"
 GHA_SHARED_IMAGES=/nowhere /usr/local/bin/shared-images.sh 2>/dev/null
-test ! -e "$conf"
+test ! -e "$dir"
+driver=$(podman info --format "{{.Store.GraphDriverName}}")
+options=$(podman info --format "{{json .Store.GraphOptions}}")
+echo "storage: $driver $options"
+[ "$driver" = overlay ]
+case $options in
+  *fuse-overlayfs*|*fsync*|*/var/lib/shared*) echo "not native overlay: $options" >&2; exit 1 ;;
+esac
 echo "unset and missing: ok"'
 
 echo "== GHA_SHARED_IMAGES set: a read-only store's image runs without a pull"
@@ -168,7 +194,8 @@ podman --root /store tag registry.access.redhat.com/ubi10/ubi-micro:latest local
   --entrypoint /bin/bash "$IMAGE" -c '
 set -euo pipefail
 /usr/local/bin/shared-images.sh
-grep -q "force_mask = \"shared\"" "$HOME/.config/containers/storage.conf"
+grep -q "force_mask = \"shared\"" "$HOME/.config/containers/storage.conf.d/50-shared-images.conf"
+podman info --format "{{json .Store.GraphOptions}}" | grep -q fuse-overlayfs
 podman run --rm --pull=never localhost/only-in-store:smoke /bin/true
 echo "image from the store, no pull: ok"
 if touch /var/lib/shared-images/written 2>/dev/null; then

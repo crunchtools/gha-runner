@@ -58,9 +58,14 @@ All notable changes to this project are documented here. The format follows
   its bridge's `route_localnet` on the read-only `/proc/sys`, and no job's
   named network starts (found on Exedore). Rootless, nothing host-wide becomes
   writable.
-- `.grype.yaml` ignores the three Critical Go CVEs compiled into Fedora's
-  podman 5.8.9 binary, each pinned to its vulnerable version and expiring
-  2026-12-18; podman 6 fixes them (#26, #28).
+- **podman 6.2.0** (`quay.io/podman/stable:v6.2.0-immutable`, by digest),
+  which carries none of the three Critical Go CVEs in Fedora's podman 5.8.9
+  binary, so `.grype.yaml` and its ignores are gone (#26, #28). podman 6 reads
+  the base's rootless storage drop-in, which would put every job on
+  fuse-overlayfs with `fsync=0`; the image's `30-gha-runner.conf` keeps native
+  overlay, and the smoke test asserts it.
+- `shared-images.sh` writes a user `storage.conf.d` drop-in instead of
+  `storage.conf`, so it layers over the image's storage rather than replacing it.
 
 ### Added
 
@@ -70,6 +75,12 @@ All notable changes to this project are documented here. The format follows
   fuse-overlayfs with `force_mask = "shared"`, so jobs run its images without
   pulling. Unset, nothing is written and storage is as before. The smoke test
   covers both, and that a job cannot write to the store.
+- **What GitHub-held jobs need (a283):** shellcheck, python3-pip, and the
+  libraries and font puppeteer's headless Chrome loads (nss, nspr, atk, cups,
+  gbm, pango, the X client libraries and others). Chrome for Testing 158
+  renders a page in the image; the smoke test checks each library resolves.
+- Constitution 1.5.0 lets the image override the base's rootless storage
+  drop-in to stay on native overlay.
 - Constitution 1.4.0 permits that mount and says what the docker.sock link
   grants.
 

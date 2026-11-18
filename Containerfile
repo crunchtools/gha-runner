@@ -13,7 +13,7 @@
 # (fuse-overlayfs IS packaged in ubi-10 appstream and does not fix it), every
 # netns/userns/cgroupns combination, --privileged, --network host, unmask=ALL,
 # and the subuid layout. UBI 10 pins podman 5.8.2 and ships no newer build.
-# quay.io/podman/stable (Fedora, podman 5.8.9) does it correctly, and it is the
+# quay.io/podman/stable (Fedora, podman 6) does it correctly, and it is the
 # upstream project's own podman-in-podman image -- which is the job here.
 #
 # WHY NOT A HUMMINGBIRD/RHHI IMAGE: those carry no shell, no package manager and
@@ -21,15 +21,16 @@
 # `bash -e {0}`. RHHI is what we ship; this is a build machine.
 #
 # The base already provides podman, crun, fuse-overlayfs, the nested
-# containers.conf/storage.conf and BUILDAH_ISOLATION=chroot. Do not re-declare
-# those here: they are the reason this base was chosen and a local copy would
-# drift from it.
+# containers.conf and BUILDAH_ISOLATION=chroot. Do not re-declare those here:
+# they are the reason this base was chosen and a local copy would drift from
+# it. Storage is the one exception, below.
 #
 # Pinned by digest, not by tag: the runner executes repository code, so "what
 # changed under us" must never be a question.
-# v5.8.9-immutable. The previous pin's digest was garbage-collected from quay
-# (2026-11-04), which stopped every build of this image.
-FROM quay.io/podman/stable@sha256:0ccbc4e7f79f9c33e7fc959be59f714abbc0f4c9cffbe14f5bceff537a014738
+# v6.2.0-immutable (Fedora 45, podman 6.2.0). podman 5's vendored grpc, x/net
+# and podman module carried fixable Criticals that .grype.yaml had to ignore
+# (#26, #28); 6.2.0 does not.
+FROM quay.io/podman/stable@sha256:39a21e7832dbf018803aae152b421fc589563678e2559d36125a9cc4aba2617a
 
 LABEL maintainer="crunchtools.com" \
       description="GitHub Actions self-hosted runner: ephemeral, rootless, with nested podman for container builds" \
@@ -46,6 +47,12 @@ USER 0
 # git/tar/gzip are actions/checkout's; jq and openssl sign the GitHub App JWT in
 # the entrypoint.
 #
+# The rest is what jobs held on GitHub's machines need to come here (a283):
+# shellcheck (josui-skills), python3-pip (hermes' pin verifier tests), and the
+# shared libraries puppeteer's Chrome loads (acquacotta's JavaScript tests),
+# with one font so a page renders text. GitHub's hosted image carries all of
+# them; the smoke test checks each library resolves.
+#
 # `dnf -y upgrade` first, because nothing else moves this layer: the base is
 # pinned by digest, and Trivy has no Fedora advisory source (it prints
 # `Unsupported os family="fedora"` and scans language packages only), so the
@@ -60,6 +67,10 @@ RUN : "upgrade ${UPGRADE_STAMP}" \
       lttng-ust openssl-libs krb5-libs zlib libicu \
       git tar gzip findutils which procps-ng hostname \
       jq openssl \
+      shellcheck python3-pip \
+      nss nspr atk at-spi2-atk cups-libs dbus-libs libdrm mesa-libgbm \
+      pango cairo alsa-lib expat libX11 libxcb libXcomposite libXdamage \
+      libXext libXfixes libXrandr libxkbcommon liberation-sans-fonts \
  && dnf -y clean all \
  && rm -rf /var/cache/dnf
 
@@ -92,6 +103,25 @@ RUN curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 -o /tmp/gh.tar.gz \
 # it. It grants nothing a job lacks: podman as this user, as the shim does.
 RUN ln -sfn /home/podman/.runtime/podman/podman.sock /run/docker.sock \
  && test "$(readlink -f /var/run)" = /run
+
+# Storage. podman 6 reads the base's rootless drop-in
+# /etc/containers/storage.rootless.conf.d/20-image_build.conf, which turns on
+# fuse-overlayfs with mountopt "nodev,fsync=0" and adds /var/lib/shared as an
+# image store -- right for building images, slower for a runner's jobs, and not
+# what podman 5 gave this user (native overlay, no options). This later drop-in
+# puts that back. shared-images.sh layers a user drop-in over it when a runner
+# opts into a shared store (GHA_SHARED_IMAGES).
+RUN printf '%s\n' \
+      '# gha-runner: native overlay and no extra image store, as podman 5 gave' \
+      '# the runner user. Overrides 20-image_build.conf.' \
+      '[storage.options]' \
+      'additionalimagestores = []' \
+      '' \
+      '[storage.options.overlay]' \
+      'mount_program = ""' \
+      'mountopt = "nodev"' \
+      > /etc/containers/storage.rootless.conf.d/30-gha-runner.conf \
+ && test -f /etc/containers/storage.rootless.conf.d/20-image_build.conf
 
 # uid 1000, with the base's own carefully-laid-out subuid ranges for nesting.
 USER 1000
