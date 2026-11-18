@@ -1,0 +1,11 @@
+# Installed at /etc/systemd/system/gha-images-warm.timer on exedore (a276).
+[Unit]
+Description=Warm the runners' shared image store hourly and at boot
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+RandomizedDelaySec=2min
+
+[Install]
+WantedBy=timers.target

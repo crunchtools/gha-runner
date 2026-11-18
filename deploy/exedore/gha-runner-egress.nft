@@ -5,7 +5,8 @@
 # socket owned by the runner's host user. So an owner match on that uid fences
 # the whole runner, nested builds included, without touching any other process.
 # uids 2100-2199 are reserved for runner users (gha-runner-instance allocates
-# 2100+slot). Everything public stays reachable; the host itself (loopback,
+# 2100+slot), and 2090 is ghimages, which warms the shared image store.
+# Everything public stays reachable; the host itself (loopback,
 # where OpenBao listens, and every local address), the seats' podman bridge,
 # the WireGuard fleet network and the LAN do not, except the LAN resolver for
 # DNS. If DHCP ever hands out a different resolver, runners lose DNS -- they
@@ -15,7 +16,7 @@ delete table inet gha_runner_egress
 table inet gha_runner_egress {
 	chain output {
 		type filter hook output priority filter; policy accept;
-		meta skuid != 2100-2199 accept
+		meta skuid != { 2090, 2100-2199 } accept
 		meta l4proto { tcp, udp } th dport 53 ip daddr 192.168.1.254 accept
 		meta l4proto { tcp, udp } th dport 53 ip6 daddr 2600:1702:5870:f50::1 accept
 		fib daddr type local counter reject
@@ -24,7 +25,7 @@ table inet gha_runner_egress {
 		# Multicast and broadcast reach the LAN too (mDNS, SSDP). Matched on the uid
 		# again because the kernel's own IGMP reports carry no socket and fall through
 		# the first rule; they must still go out.
-		meta skuid 2100-2199 ip daddr { 224.0.0.0/4, 255.255.255.255 } counter reject
-		meta skuid 2100-2199 ip6 daddr ff00::/8 counter reject
+		meta skuid { 2090, 2100-2199 } ip daddr { 224.0.0.0/4, 255.255.255.255 } counter reject
+		meta skuid { 2090, 2100-2199 } ip6 daddr ff00::/8 counter reject
 	}
 }
