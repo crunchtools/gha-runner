@@ -102,10 +102,10 @@ result in the runner's journal:
 
 ## Promoting a new image
 
-Both units run `quay.io/crunchtools/gha-runner@sha256:…` with `--pull=missing`,
-never `:main`: a merge does not reach the pool until someone promotes it.
-`scripts/deploy-units-test.sh` fails CI if either template names `:main` or
-`--pull=newer`.
+Both units and `gha-images-warm` run `quay.io/crunchtools/gha-runner@sha256:…`
+with `--pull=missing`, never `:main`: a merge does not reach the pool until
+someone promotes it. `scripts/deploy-units-test.sh` fails CI if any of the
+three names `:main` or `--pull=newer`, or if they pin different digests.
 
 1. Resolve the release's digest (tags carry no `v`):
    `podman pull -q quay.io/crunchtools/gha-runner:1.2.0 && podman image inspect --format '{{.Digest}}' quay.io/crunchtools/gha-runner:1.2.0`.
@@ -119,8 +119,9 @@ never `:main`: a merge does not reach the pool until someone promotes it.
    `systemctl restart gha-runner-uncached@1` while it is idle (a waiting
    runner's container already holds the old image). Wait for one green job on
    `exedore-uncached1`.
-4. Promote: sed the new digest into both templates in `/etc/systemd/system/`,
-   `rm` the canary file, `systemctl daemon-reload`. A runner moves to the new
+4. Promote: sed the new digest into both templates in `/etc/systemd/system/`
+   and into `/srv/gha-runner/bin/gha-images-warm`, `rm` the canary file,
+   `systemctl daemon-reload`. A runner moves to the new
    image when its container next starts, so a busy one after its job, an idle
    one after its next job or an idle restart. Land the same digest in this
    directory by pull request.

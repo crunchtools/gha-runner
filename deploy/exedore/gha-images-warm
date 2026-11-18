@@ -21,14 +21,16 @@ set -euo pipefail
 STORE=${GHA_IMAGES_STORE:-/var/mnt/onsite/gha-runner-cache/shared-images}
 LIST=${GHA_IMAGES_LIST:-/srv/gha-runner/config/shared-images.list}
 PENDING=$HOME/prune-next-run
-RUNNER=quay.io/crunchtools/gha-runner:main
+# The runner image by digest, the same one the units pin (a315): promoted with
+# them, never pulled as :main.
+RUNNER=quay.io/crunchtools/gha-runner@sha256:9f8aa398d3d49de17ce4da6b9d102d947c22e5c078596fa84b2cf6a64d591b6b
 
 mapfile -t images < <(grep -vE '^[[:space:]]*(#|$)' "$LIST")
 [ ${#images[@]} -gt 0 ] || { echo "gha-images-warm: $LIST lists no images" >&2; exit 1; }
 
 # store <podman args...> -- podman against the store, from inside the runner image.
 store() {
-  podman run --rm --user 0 --pull=newer --device /dev/fuse --security-opt label=disable \
+  podman run --rm --user 0 --pull=missing --device /dev/fuse --security-opt label=disable \
     -v "$STORE":/var/lib/shared-images --entrypoint podman "$RUNNER" \
     --root /var/lib/shared-images --runroot /run/store \
     --storage-opt overlay.mount_program=/usr/bin/fuse-overlayfs \

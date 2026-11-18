@@ -17,7 +17,8 @@ All notable changes to this project are documented here. The format follows
   by digest, canary one uncached runner, then sed and reload.
   `scripts/deploy-units-test.sh`, run by `deploy-units-test.yml`, fails if
   either template names `:main` or `--pull=newer`, or if the templates pin
-  different digests.
+  different digests. `gha-images-warm` runs the same digest with
+  `--pull=missing`, is promoted with the units, and is checked the same way.
 - **The cached runners' stores are pruned daily** (a315). Each grew to 40-45G
   unpruned and filled the runner filesystem (ENOSPC on private-repo jobs).
   `gha-runner-prune.timer` leaves a flag in each cached runner's home, and the

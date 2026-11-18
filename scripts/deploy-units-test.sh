@@ -1,10 +1,11 @@
 #!/bin/bash
-# The Exedore runner units run an image pinned by digest (a315). After the
-# libssl outage, a merged :main pulled with --pull=newer is exactly what must
-# never reach the pool again, so this fails if either template names :main or
-# --pull=newer, refers to the runner image by anything but @sha256, or pins the
-# two templates (or a unit's mint and runner) to different digests. A new image
-# arrives only by promotion: deploy/exedore/README.md "Promoting a new image".
+# The Exedore runner units, and gha-images-warm, run an image pinned by digest
+# (a315). After the libssl outage, a merged :main pulled with --pull=newer is
+# exactly what must never reach the pool again, so this fails if any of them
+# names :main or --pull=newer, refers to the runner image by anything but
+# @sha256, or pins a different digest from the others (or a unit's mint and
+# runner differ). A new image arrives only by promotion:
+# deploy/exedore/README.md "Promoting a new image".
 #
 # The checker runs on deliberately broken copies first, so a regex that went
 # blind would fail here rather than pass everything.
@@ -44,12 +45,15 @@ check() {
     done <<<"$refs"
   done
   if [ "${#digests[@]}" -gt 1 ]; then
-    echo "templates pin different digests: ${!digests[*]}" >&2; bad=1
+    echo "they pin different digests: ${!digests[*]}" >&2; bad=1
   fi
   return "$bad"
 }
 
-units=("$units_dir"/gha-runner-cached@.service "$units_dir"/gha-runner-uncached@.service)
+# The two runner templates, and gha-images-warm, which runs the same image to
+# write the shared store and is promoted with them.
+units=("$units_dir"/gha-runner-cached@.service "$units_dir"/gha-runner-uncached@.service
+       "$units_dir"/gha-images-warm)
 # Empty when the cached unit is not pinned at all: the self-checks below mutate
 # its digest, so they are skipped and the unit check says what is wrong.
 pinned=$(grep -o 'gha-runner@sha256:[0-9a-f]*' "${units[0]}" | head -1 || true)
@@ -79,7 +83,7 @@ fi
 
 case="deploy/exedore units"
 if check "${units[@]}"; then
-  echo "pinned: both units run gha-runner@$pinned"
+  echo "pinned: both units and gha-images-warm run gha-runner@$pinned"
 else
   fail "a unit is not pinned (see above)"
 fi
