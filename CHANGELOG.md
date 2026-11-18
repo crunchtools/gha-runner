@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-11-18
+
 ### Fixed
 
 - **The Exedore unit templates match what runs there** (a315). After the libssl
