@@ -43,9 +43,10 @@ AppRole, so an escape from one instance reaches neither another's cache nor its 
 
 `gha-images-warm.timer` runs hourly and 5 minutes after boot. It pulls the
 images in `shared-images.list` into one read-only store inside the 200G
-filesystem. The first warm took 255s and 3.2G; a run with nothing new takes
-about 30s. A version that loses its tag is pruned one run later, so a job
-already using it keeps its layers. Jobs read the store and never write it.
+filesystem. The first warm took 255s. The store is ~4G, grows with the list,
+and a run with nothing new takes about 30s. A version that loses its tag is
+pruned one run later, so a job already using it keeps its layers. Jobs read
+the store and never write it.
 
 The store is written by a nested podman with fuse-overlayfs and
 `force_mask=shared`. Files on disk stay owned by `ghimages` and readable by
