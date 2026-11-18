@@ -16,9 +16,12 @@ All notable changes to this project are documented here. The format follows
 - **grype ignores expire.** grype's rules have no expiry field, so each
   `.grype.yaml` ignore carries an `EXPIRES YYYY-MM-DD` comment, and
   `grype-expiry.yml` fails on every change and daily once one has passed.
-  Each ignore is governed by the nearest `EXPIRES` above it; an ignore with
-  none, or under a date that is not a real one, fails too
-  (`scripts/grype-expiry.sh`, tested by `scripts/grype-expiry-test.sh`).
+  The file is parsed as YAML, so every `ignore:` entry counts, whatever it
+  matches on (`vulnerability`, `package`, `fix-state`) and in block or flow
+  style. Each is governed by the nearest `EXPIRES` at or above it; one with
+  none, or under a malformed or impossible date, fails. `.grype.yml` and
+  `.grype/config.yaml`, which grype also loads, fail by existing
+  (`scripts/grype_expiry.py`, tested by `scripts/test_grype_expiry.py`).
 
 ### Fixed
 

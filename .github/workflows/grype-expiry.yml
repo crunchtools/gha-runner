@@ -35,7 +35,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: The expiry check's own tests
-        run: scripts/grype-expiry-test.sh
-      - name: No .grype.yaml ignore is past its EXPIRES date
-        run: scripts/grype-expiry.sh .grype.yaml
+      # The check parses YAML, and the runner image carries no PyYAML, so it
+      # runs in a pinned Python image; podman is on our runners and GitHub's.
+      - name: The expiry check's tests, then no grype ignore past its EXPIRES date
+        run: >-
+          podman run --rm -v "$PWD:/w:ro,Z" -w /w docker.io/library/python:3.12-slim
+          sh -c 'pip install -q --no-cache-dir --root-user-action=ignore pyyaml==6.0.3
+          && python scripts/test_grype_expiry.py && python scripts/grype_expiry.py'

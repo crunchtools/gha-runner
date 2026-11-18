@@ -1,0 +1,85 @@
+"""Tests for grype_expiry.py, with fixture repos and a fixed `today`."""
+
+import os
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+import grype_expiry  # noqa: E402
+
+TODAY = "2026-11-18"
+DATED = "# EXPIRES 2026-12-18\nignore:\n  - vulnerability: A\n  - vulnerability: B\n"
+
+
+class GrypeExpiry(unittest.TestCase):
+    def run_on(self, files: dict[str, str], today: str = TODAY) -> int:
+        with tempfile.TemporaryDirectory() as root:
+            for name, text in files.items():
+                path = Path(root, name)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text)
+            return grype_expiry.main(["grype_expiry.py", root, today])
+
+    def test_dates(self) -> None:
+        self.assertEqual(self.run_on({".grype.yaml": DATED}), 0)
+        self.assertEqual(self.run_on({".grype.yaml": DATED}, "2026-12-18"), 0)
+        self.assertEqual(self.run_on({".grype.yaml": DATED}, "2026-12-19"), 1)
+
+    def test_every_entry_needs_a_date(self) -> None:
+        self.assertEqual(self.run_on({".grype.yaml": "ignore:\n  - vulnerability: A\n"}), 1)
+        late = "ignore:\n  - vulnerability: A\n  # EXPIRES 2026-12-18\n  - vulnerability: B\n"
+        self.assertEqual(self.run_on({".grype.yaml": late}), 1)
+
+    def test_the_nearest_date_governs(self) -> None:
+        two = "# EXPIRES 2027-01-01\nignore:\n  - vulnerability: A\n  # EXPIRES 2026-12-01\n  - vulnerability: B\n"
+        self.assertEqual(self.run_on({".grype.yaml": two}, "2026-12-02"), 1)
+
+    def test_malformed_dates_fail(self) -> None:
+        for directive in ("EXPIRES soon", "EXPIRES 2099-99-99", "EXPIRES 2026-12-188"):
+            text = f"# EXPIRES 2027-01-01\nignore:\n  - vulnerability: A\n  # {directive}\n  - vulnerability: B\n"
+            self.assertEqual(self.run_on({".grype.yaml": text}), 1, directive)
+
+    def test_entries_that_name_no_vulnerability_count(self) -> None:
+        for entry in (
+            "  - package:\n      name: x\n    vulnerability: A\n",
+            "  - fix-state: unknown\n",
+            "  - package: {name: x}\n",
+        ):
+            self.assertEqual(self.run_on({".grype.yaml": "ignore:\n" + entry}), 1, entry)
+            self.assertEqual(self.run_on({".grype.yaml": "# EXPIRES 2026-12-18\nignore:\n" + entry}), 0, entry)
+
+    def test_flow_style(self) -> None:
+        flow = "ignore: [{vulnerability: A}, {fix-state: unknown}]\n"
+        self.assertEqual(self.run_on({".grype.yaml": flow}), 1)
+        self.assertEqual(self.run_on({".grype.yaml": "# EXPIRES 2026-12-18\n" + flow}), 0)
+
+    def test_nothing_to_expire(self) -> None:
+        self.assertEqual(self.run_on({}), 0)
+        self.assertEqual(self.run_on({".grype.yaml": "# nothing ignored\n"}), 0)
+        self.assertEqual(self.run_on({".grype.yaml": "ignore: []\n"}), 0)
+
+    def test_other_configs_grype_loads_fail(self) -> None:
+        for name in (".grype.yml", ".grype/config.yaml", ".grype/config.yml"):
+            self.assertEqual(self.run_on({".grype.yaml": DATED, name: DATED}), 1, name)
+
+    def test_unreadable_or_odd_input(self) -> None:
+        self.assertEqual(self.run_on({".grype.yaml": "ignore: {vulnerability: A}\n"}), 1)
+        self.assertEqual(self.run_on({".grype.yaml": "ignore: [\n"}), 1)
+        self.assertEqual(self.run_on({".grype.yaml": DATED}, "not-a-date"), 2)
+        self.assertEqual(self.run_on({".grype.yaml": DATED}, "2026-1-5"), 2)
+        if os.geteuid() != 0:
+            with tempfile.TemporaryDirectory() as root:
+                path = Path(root, ".grype.yaml")
+                path.write_text(DATED)
+                path.chmod(0)
+                self.assertEqual(grype_expiry.main(["grype_expiry.py", root, TODAY]), 2)
+
+    def test_this_repos_file(self) -> None:
+        repo = Path(__file__).parent.parent
+        self.assertEqual(grype_expiry.main(["grype_expiry.py", str(repo), TODAY]), 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
