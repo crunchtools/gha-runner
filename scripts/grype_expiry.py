@@ -35,6 +35,7 @@ DATE = re.compile(r"EXPIRES (\d{4}-\d{2}-\d{2})(?!\d)")
 
 
 def calendar_date(text: str) -> datetime.date | None:
+    """`text` as a date if it is exactly a real YYYY-MM-DD date, else None."""
     try:
         day = datetime.date.fromisoformat(text)
     except ValueError:
@@ -77,6 +78,11 @@ def entry_lines(text: str) -> list[int]:
 
 
 def check(path: Path, name: str, today: datetime.date) -> list[str]:
+    """Judge one grype config: `path` to read, `name` to report it as, `today` to
+    compare against. Prints each current entry; returns one message per entry
+    that is undated, malformed or expired. Raises OSError if unreadable, and
+    yaml.YAMLError or ValueError if it is not a config this can judge.
+    """
     text = path.read_text()
     dates = directives(text)
     lines = [at for at, _ in dates]

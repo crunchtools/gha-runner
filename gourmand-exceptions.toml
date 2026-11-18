@@ -5,3 +5,15 @@ check = "CH001-absolute_paths"
 path = "gatehouse-findings.toml"
 justification = "Each judged finding quotes its evidence verbatim, and Gatehouse matches the judgement to the finding by that text; the paths are the Containerfile's, quoted, not paths this file reads."
 classification = "by_design"
+
+[[exceptions]]
+check = "IF001-linter_configuration"
+path = "pyproject.toml"
+justification = "A Container Image repo, not a Python project: its only Python is scripts/grype_expiry.py and its test, run with PyYAML in a pinned python:3.12-slim by grype-expiry.yml. A pyproject would make sdlc treat the repo as a Python package it is not."
+classification = "by_design"
+
+[[exceptions]]
+check = "IF001-linter_configuration"
+path = ".pre-commit-config.yaml"
+justification = "Same reason: no Python package here to lint with a ruff hook; the two scripts are exercised by their unittest suite in CI on every change."
+classification = "by_design"
