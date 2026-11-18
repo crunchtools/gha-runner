@@ -36,7 +36,7 @@ class GrypeExpiry(unittest.TestCase):
         self.assertEqual(self.run_on({".grype.yaml": two}, "2026-12-02"), 1)
 
     def test_malformed_dates_fail(self) -> None:
-        for directive in ("EXPIRES soon", "EXPIRES 2099-99-99", "EXPIRES 2026-12-188"):
+        for directive in ("EXPIRES soon", "EXPIRES 2099-99-99", "EXPIRES 2026-12-188", "EXPIRES 2026-12-18oops"):
             text = f"# EXPIRES 2027-01-01\nignore:\n  - vulnerability: A\n  # {directive}\n  - vulnerability: B\n"
             self.assertEqual(self.run_on({".grype.yaml": text}), 1, directive)
 
@@ -48,6 +48,13 @@ class GrypeExpiry(unittest.TestCase):
         ):
             self.assertEqual(self.run_on({".grype.yaml": "ignore:\n" + entry}), 1, entry)
             self.assertEqual(self.run_on({".grype.yaml": "# EXPIRES 2026-12-18\nignore:\n" + entry}), 0, entry)
+
+    def test_only_comments_are_directives(self) -> None:
+        for value in ('"EXPIRES 2027-01-01"', '"x # EXPIRES 2027-01-01"', "EXPIRES-2027-01-01"):
+            text = f"note: {value}\nignore:\n  - vulnerability: A\n"
+            self.assertEqual(self.run_on({".grype.yaml": text}), 1, value)
+        trailing = "ignore:\n  - vulnerability: A  # EXPIRES 2026-12-18 (reason)\n"
+        self.assertEqual(self.run_on({".grype.yaml": trailing}), 0)
 
     def test_flow_style(self) -> None:
         flow = "ignore: [{vulnerability: A}, {fix-state: unknown}]\n"

@@ -31,7 +31,7 @@ import yaml
 PRIMARY = ".grype.yaml"
 CANDIDATES = (PRIMARY, ".grype.yml", ".grype/config.yaml", ".grype/config.yml")
 DIRECTIVE = re.compile(r"(?<![A-Za-z])EXPIRES(?![A-Za-z])")
-DATE = re.compile(r"EXPIRES (\d{4}-\d{2}-\d{2})(?!\d)")
+DATE = re.compile(r"EXPIRES (\d{4}-\d{2}-\d{2})(?=\s|$)")
 
 
 def calendar_date(text: str) -> datetime.date | None:
@@ -43,12 +43,34 @@ def calendar_date(text: str) -> datetime.date | None:
     return day if day.isoformat() == text else None
 
 
+def comments(text: str) -> list[tuple[int, str]]:
+    """(line, comment text) for every YAML comment: a `#` at a line's start or
+    after whitespace that lies outside every scalar, found with PyYAML's own
+    scanner so `#` inside a quoted value is never mistaken for one."""
+    scalars = [
+        (token.start_mark.index, token.end_mark.index)
+        for token in yaml.scan(text)
+        if isinstance(token, yaml.ScalarToken)
+    ]
+    found = []
+    offset = 0
+    for number, line in enumerate(text.splitlines(keepends=True), start=1):
+        for column, char in enumerate(line):
+            at = offset + column
+            if char == "#" and (column == 0 or line[column - 1].isspace()):
+                if not any(start <= at < end for start, end in scalars):
+                    found.append((number, line[column:].rstrip("\n")))
+                    break
+        offset += len(line)
+    return found
+
+
 def directives(text: str) -> list[tuple[int, datetime.date | None]]:
     """(line, date) for every EXPIRES comment; date is None when malformed."""
     found = []
-    for number, line in enumerate(text.splitlines(), start=1):
-        if DIRECTIVE.search(line):
-            match = DATE.search(line)
+    for number, comment in comments(text):
+        if DIRECTIVE.search(comment):
+            match = DATE.search(comment)
             found.append((number, calendar_date(match[1]) if match else None))
     return found
 
