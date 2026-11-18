@@ -1,13 +1,12 @@
 """Tests for grype_expiry.py, with fixture repos and a fixed `today`."""
 
 import os
-import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).parent))
-import grype_expiry  # noqa: E402
+import grype_expiry  # beside this file, which is first on sys.path when run as a script
 
 TODAY = "2026-11-18"
 DATED = "# EXPIRES 2026-12-18\nignore:\n  - vulnerability: A\n  - vulnerability: B\n"
@@ -67,14 +66,28 @@ class GrypeExpiry(unittest.TestCase):
     def test_unreadable_or_odd_input(self) -> None:
         self.assertEqual(self.run_on({".grype.yaml": "ignore: {vulnerability: A}\n"}), 1)
         self.assertEqual(self.run_on({".grype.yaml": "ignore: [\n"}), 1)
+        self.assertEqual(self.run_on({".grype.yaml": "ignore\n"}), 1)
+        self.assertEqual(self.run_on({".grype.yaml": "- vulnerability: A\n"}), 1)
+        aliased = (
+            "# EXPIRES 2026-12-18\nbase: &x {vulnerability: A}\nignore:\n  - vulnerability: B\n"
+            "  # EXPIRES 2026-01-01\n  - *x\n"
+        )
+        self.assertEqual(self.run_on({".grype.yaml": aliased}), 1)
         self.assertEqual(self.run_on({".grype.yaml": DATED}, "not-a-date"), 2)
         self.assertEqual(self.run_on({".grype.yaml": DATED}, "2026-1-5"), 2)
+        self.assertEqual(self._read_fails(), 2)
         if os.geteuid() != 0:
             with tempfile.TemporaryDirectory() as root:
                 path = Path(root, ".grype.yaml")
                 path.write_text(DATED)
                 path.chmod(0)
                 self.assertEqual(grype_expiry.main(["grype_expiry.py", root, TODAY]), 2)
+
+    def _read_fails(self) -> int:
+        with tempfile.TemporaryDirectory() as root:
+            Path(root, ".grype.yaml").write_text(DATED)
+            with mock.patch.object(Path, "read_text", side_effect=PermissionError("denied")):
+                return grype_expiry.main(["grype_expiry.py", root, TODAY])
 
     def test_this_repos_file(self) -> None:
         repo = Path(__file__).parent.parent

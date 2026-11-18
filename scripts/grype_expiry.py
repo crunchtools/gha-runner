@@ -20,6 +20,7 @@ Usage: grype_expiry.py [repo root] [today as YYYY-MM-DD, default UTC now]
 Exit: 0 all dated and current, 1 a finding, 2 the check could not run.
 """
 
+import bisect
 import datetime
 import re
 import sys
@@ -52,7 +53,13 @@ def directives(text: str) -> list[tuple[int, datetime.date | None]]:
 
 
 def entry_lines(text: str) -> list[int]:
-    """The first line of each entry under the top-level `ignore:` key."""
+    """The first line of each entry under the top-level `ignore:` key.
+
+    Aliases are refused: an alias reuses its anchor's node and so its line,
+    which would let an entry be judged by the wrong EXPIRES.
+    """
+    if any(isinstance(event, yaml.AliasEvent) for event in yaml.parse(text)):
+        raise ValueError("YAML aliases are not allowed; write each ignore out in full")
     root = yaml.compose(text)
     if root is None:
         return []
@@ -72,17 +79,20 @@ def entry_lines(text: str) -> list[int]:
 def check(path: Path, name: str, today: datetime.date) -> list[str]:
     text = path.read_text()
     dates = directives(text)
+    lines = [at for at, _ in dates]
     errors = []
     for line in entry_lines(text):
-        governing = [day for at, day in dates if at <= line]
-        if not governing:
+        index = bisect.bisect_right(lines, line) - 1
+        if index < 0:
             errors.append(f"{name}:{line}: this grype ignore has no EXPIRES date above it")
-        elif governing[-1] is None:
+            continue
+        day = dates[index][1]
+        if day is None:
             errors.append(f"{name}:{line}: the EXPIRES governing this ignore has no valid YYYY-MM-DD date")
-        elif governing[-1] < today:
-            errors.append(f"{name}:{line}: this grype ignore expired on {governing[-1]}; fix or re-justify it")
+        elif day < today:
+            errors.append(f"{name}:{line}: this grype ignore expired on {day}; fix or re-justify it")
         else:
-            print(f"{name}:{line} expires {governing[-1]}")
+            print(f"{name}:{line} expires {day}")
     return errors
 
 
