@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-11-18
+
 ### Added
 
 - **skopeo** (a308). constitution's `container-release.yml` calls it in `build`
