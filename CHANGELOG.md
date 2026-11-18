@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-11-18
+
 ### Fixed
 
 - **Red Hat images pull again, still signature-verified** (a358). From
