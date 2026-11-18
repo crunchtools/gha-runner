@@ -103,7 +103,18 @@ docker create --name smoke_job --network smoke_net \
   -v /tmp:/__w --workdir /__w \
   --entrypoint tail "$img" -f /dev/null >/dev/null
 docker start smoke_job >/dev/null
-docker exec smoke_job sh -c "test -S /var/run/docker.sock && getent hosts svc >/dev/null"
+docker exec smoke_job test -S /var/run/docker.sock
+# The alias must resolve to the service itself, through aardvark-dns. Anything
+# else -- an NXDOMAIN that falls through the host search domain to an outside
+# host of the same name, which is how Exedore first "passed" -- is a failure:
+# a real job would quietly talk to that host instead of its service.
+svc_ip=$(docker inspect smoke_svc --format "{{(index .NetworkSettings.Networks \"smoke_net\").IPAddress}}")
+got=$(docker exec smoke_job getent ahostsv4 svc | awk "NR==1 {print \$1}")
+if [ -z "$svc_ip" ] || [ "$got" != "$svc_ip" ]; then
+  echo "alias svc resolved to \"$got\", not the service at \"$svc_ip\"" >&2
+  docker exec smoke_job cat /etc/resolv.conf >&2
+  exit 1
+fi
 docker rm -f smoke_job smoke_svc >/dev/null
 docker network rm smoke_net >/dev/null
 echo "job container and service: ok"'
