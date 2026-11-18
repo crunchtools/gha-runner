@@ -1,0 +1,88 @@
+# Installed at /etc/systemd/system/gha-runner-cached@.service on exedore (a264).
+#
+# One CACHED runner per instance: gha-runner-cached@1 .. @4. Same shape as
+# gloval's gha-runner-cached.crunchtools.com.service -- read that header for
+# the why of the two containers, the ephemeral registration and the missing
+# NoNewPrivileges -- with three exedore differences:
+#
+#   One rootless user PER INSTANCE (ghrunner-cachedN), not per class. Each
+#   instance has its own layer cache, and a job that escapes instance 1 must
+#   not be able to write into the cache instance 2's next job builds from.
+#
+#   Storage lives in a 200G XFS loop image on the onsite backup volume
+#   (/var/mnt/onsite/gha-runner-cache, see the .mount unit). The cap is the
+#   filesystem's size, so the runners can fill it and never the backups.
+#
+#   gha-runner-egress.service is REQUIRED: it is the nftables owner-match that
+#   stops these users' sockets reaching the host's loopback (OpenBao), the
+#   seats' podman bridge and the private networks. No fence, no runner.
+#
+# Provision a new instance with /srv/gha-runner/bin/gha-runner-instance first;
+# enabling a template instance whose user does not exist fails at User=.
+[Unit]
+Description=GitHub Actions runner cached%i (exedore, persistent layer cache)
+Documentation=https://github.com/crunchtools/gha-runner/blob/main/deploy/exedore/README.md
+Requires=srv-secrets@gha-runner-cached%i.service gha-runner-egress.service
+After=srv-secrets@gha-runner-cached%i.service gha-runner-egress.service
+RequiresMountsFor=/var/mnt/onsite/gha-runner-cache
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=ghrunner-cached%i
+Group=ghrunner-cached%i
+Slice=gha-runner.slice
+RuntimeDirectory=gha-runner-cached%i
+RuntimeDirectoryMode=0700
+Environment=XDG_RUNTIME_DIR=/run/gha-runner-cached%i
+Environment=HOME=/var/mnt/onsite/gha-runner-cache/cached%i/home
+WorkingDirectory=/var/mnt/onsite/gha-runner-cache/cached%i/home
+
+# Hide every other service's /srv tree and everything else on the backup
+# volume; keep our config read-only and our own instance directory writable.
+TemporaryFileSystem=/var/srv:ro
+BindReadOnlyPaths=/var/srv/gha-runner/config
+TemporaryFileSystem=/var/mnt/onsite:ro
+BindPaths=/var/mnt/onsite/gha-runner-cache/cached%i
+
+Restart=always
+RestartSec=5
+
+# --pull=newer on the mint container keeps :main current without podman
+# auto-update, which as root cannot see these rootless users' containers. A
+# registry outage falls back to the local image.
+ExecStartPre=-/usr/bin/podman rm -f gha-runner-cached%i
+ExecStartPre=/bin/sh -c 'install -d -m 0700 "$XDG_RUNTIME_DIR/gha-token" && \
+  /usr/bin/podman run --rm --pull=newer --name gha-runner-cached%i-mint \
+  --env-file /srv/gha-runner/config/gha-runner-cached.env \
+  -v /run/srv-secrets/gha-runner-cached%i/gha-app.pem:/run/secrets/gha-app.pem:ro \
+  --entrypoint /usr/local/bin/mint-registration-token.sh \
+  quay.io/crunchtools/gha-runner:main \
+  > "$XDG_RUNTIME_DIR/gha-token/regtoken" && \
+  chmod 0600 "$XDG_RUNTIME_DIR/gha-token/regtoken"'
+
+# The containers directory is pre-owned by the image's uid 1000 (host subuid
+# start+999) by gha-runner-instance, so it is mounted WITHOUT :U. :U would
+# chown the whole layer cache on every job start.
+# unmask=/proc/sys lets the nested netavark set its bridge's sysctls, which
+# every `container:` or `services:` job's network needs (a273c). Rootless, the
+# kernel still refuses any sysctl outside this user's own network namespaces.
+ExecStart=/usr/bin/podman run --rm --name gha-runner-cached%i \
+  --label PODMAN_SYSTEMD_UNIT=gha-runner-cached@%i.service \
+  --device /dev/fuse \
+  --device /dev/net/tun \
+  --security-opt label=disable \
+  --security-opt unmask=/proc/sys \
+  --env-file /srv/gha-runner/config/gha-runner-cached.env \
+  -e GHA_RUNNER_NAME=exedore-cached%i \
+  -v /run/gha-runner-cached%i/gha-token:/run/gha:U \
+  -v /var/mnt/onsite/gha-runner-cache/cached%i/containers:/home/podman/.local/share/containers \
+  quay.io/crunchtools/gha-runner:main
+# `-`: after an ephemeral job the container has already exited, and a failed
+# stop would mark the unit failed on every job.
+ExecStop=-/usr/bin/podman stop -t 90 gha-runner-cached%i
+ExecStopPost=-/usr/bin/podman rm -f gha-runner-cached%i
+
+[Install]
+WantedBy=multi-user.target

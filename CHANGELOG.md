@@ -24,6 +24,20 @@ All notable changes to this project are documented here. The format follows
   `.grype/config.yaml`, which grype also loads, fail by existing
   (`scripts/grype_expiry.py`, tested by `scripts/test_grype_expiry.py`).
 
+- **The Exedore pool** (`deploy/exedore`, a264). It runs six ephemeral runners
+  in the `exedore` runner group: `gha-runner-cached@1..4` and
+  `gha-runner-uncached@1..2`. Each instance gets its own rootless user, subuid
+  range and OpenBao AppRole. They share one slice (16 CPUs, 24G), whose weight
+  sits on `gha.slice`, where it competes with the seats. Storage is a 200G
+  XFS loop image on the backup volume, capped by its size, and uncached
+  scratch is on disk rather than tmpfs. An nftables owner match keeps runner
+  traffic off the host, the seats and the private networks, multicast and
+  broadcast included.
+  `gha-runner-instance` provisions an instance.
+- Constitution 1.5.0 lets an uncached runner keep its nested storage in a
+  host scratch directory of its own, emptied before and after every job, as
+  Exedore's do: a tmpfs there would be charged to the pool's memory.
+
 ### Fixed
 
 - **Jobs with `container:` or `services:` start.** The runner hardcodes
@@ -50,6 +64,13 @@ All notable changes to this project are documented here. The format follows
   covers both, and that a job cannot write to the store.
 - Constitution 1.4.0 permits that mount and says what the docker.sock link
   grants.
+
+### Removed
+
+- Gloval's deploy files (`deploy/gha-runner-{cached,uncached}.crunchtools.com.service`,
+  their `.env.example` files and `deploy/gha-runner.slice`). Scott retired both
+  gloval runners (a279), and the host side is gone, so the README's gloval
+  layout and install steps and `deploy/exedore`'s gloval rollback go with them.
 
 ## [1.0.1] - 2026-11-11
 

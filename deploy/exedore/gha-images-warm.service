@@ -1,0 +1,28 @@
+# Installed at /etc/systemd/system/gha-images-warm.service on exedore (a276).
+# Refreshes the runners' shared read-only image store; see gha-images-warm.
+# ghimages (uid 2090) is not a runner user and runs no repository code. Its
+# egress is fenced like the runners' and it is charged to the runners' slice.
+[Unit]
+Description=Warm the GitHub Actions runners' shared image store
+Documentation=https://github.com/crunchtools/gha-runner/blob/main/deploy/exedore/README.md
+Requires=gha-runner-egress.service
+After=gha-runner-egress.service network-online.target
+Wants=network-online.target
+RequiresMountsFor=/var/mnt/onsite/gha-runner-cache
+
+[Service]
+Type=oneshot
+User=ghimages
+Group=ghimages
+Slice=gha-runner.slice
+RuntimeDirectory=ghimages
+RuntimeDirectoryMode=0700
+Environment=XDG_RUNTIME_DIR=/run/ghimages
+Environment=HOME=/var/mnt/onsite/gha-runner-cache/shared-images-home
+WorkingDirectory=/var/mnt/onsite/gha-runner-cache/shared-images-home
+TemporaryFileSystem=/var/srv:ro
+BindReadOnlyPaths=/var/srv/gha-runner/config /var/srv/gha-runner/bin
+TemporaryFileSystem=/var/mnt/onsite:ro
+BindPaths=/var/mnt/onsite/gha-runner-cache/shared-images /var/mnt/onsite/gha-runner-cache/shared-images-home
+TimeoutStartSec=1h
+ExecStart=/usr/bin/bash /srv/gha-runner/bin/gha-images-warm

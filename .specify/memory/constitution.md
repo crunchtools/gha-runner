@@ -1,6 +1,6 @@
 # gha-runner Constitution
 
-> **Version:** 1.4.0
+> **Version:** 1.5.0
 > **Ratified:** 2026-11-03
 > **Status:** Active
 > **Inherits:** [crunchtools/constitution](https://github.com/crunchtools/constitution) v1.46.0
@@ -86,19 +86,24 @@ what carries Fedora's fixes in.
   deliberate departure from the usual `--network crunchtools` unit.
 - **Two deployments, named for their storage.** `gha-runner-cached` keeps its
   nested container storage on a host path (`data/containers`, the layer cache)
-  and takes a repository's own pull requests. `gha-runner-uncached` keeps it on
-  a tmpfs inside the container and takes the builds that get published. A
+  and takes a repository's own pull requests. `gha-runner-uncached` keeps it
+  empty at every job start and takes the builds that get published: either a
+  tmpfs inside the container, or a host directory owned by that runner's user
+  alone, on a size-capped filesystem, and emptied before and after every job.
+  Not tmpfs where tmpfs would be charged to a slice the builds already fill. A
   cached store cannot build a release: every job it runs can write to that
   storage, and podman reuses an extracted layer without re-hashing it. Each runs
   as its own user, so neither can reach the other's store.
 - Mounts, and no others. Host paths: the service's `config` (the env file,
-  read-only) and, on the cached runner only, `data/containers`. Tmpfs: the
+  read-only); on the cached runner, its layer cache; on the uncached runner, its
+  emptied-every-job scratch, when that is not a tmpfs. Tmpfs: the
   directory carrying the registration token, which the runner unlinks once it
   has registered (a DIRECTORY rather than a podman secret because a secret
-  mount is read-only and that unlink has to be real); and, on the uncached
-  runner only, the nested container storage, capped in size and charged to the
-  slice like the job itself. Optionally, on either runner, one shared image
-  store mounted READ-ONLY and named by `GHA_SHARED_IMAGES`: jobs read images
+  mount is read-only and that unlink has to be real); and, on an uncached
+  runner without a scratch directory, the nested container storage, capped in
+  size and charged to the slice like the job itself. Optionally, on either
+  runner, one shared image store mounted READ-ONLY and named by
+  `GHA_SHARED_IMAGES`: jobs read images
   from it and cannot write, add or remove one, so it carries nothing from one
   job to the next. Unset, the runner's storage is as it was.
 - **Ephemeral registration, one job per container, on both.** A registration
