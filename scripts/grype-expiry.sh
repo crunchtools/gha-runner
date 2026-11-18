@@ -16,6 +16,8 @@ set -euo pipefail
 
 file=${1:-.grype.yaml}
 today=${2:-$(date -u +%F)}
+[ "$(date -u -d "$today" +%F 2>/dev/null)" = "$today" ] \
+  || { echo "::error::today must be a calendar date as YYYY-MM-DD, not '$today'" >&2; exit 2; }
 [ -f "$file" ] || { echo "no $file: nothing to expire"; exit 0; }
 [ -r "$file" ] || { echo "::error::cannot read $file" >&2; exit 2; }
 
