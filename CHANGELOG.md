@@ -13,7 +13,11 @@ All notable changes to this project are documented here. The format follows
   there, so they failed in "Initialize containers" (crunchtools/gatehouse#153).
   `/run/docker.sock` now links to the podman API the entrypoint already serves.
   The smoke test replays the runner's network, service and job-container
-  sequence before the image is published.
+  sequence before the image is published. Both units add
+  `--security-opt unmask=/proc/sys`: without it the nested netavark cannot set
+  its bridge's `route_localnet` on the read-only `/proc/sys`, and no job's
+  named network starts (found on Exedore). Rootless, nothing host-wide becomes
+  writable.
 
 ### Added
 

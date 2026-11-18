@@ -75,12 +75,14 @@ echo "== a job container and a service container, as the runner starts them"
 # A named network needs podman's rootless network namespace, which Ubuntu's
 # AppArmor (GitHub's runner, where this test runs) refuses to a nested podman;
 # the deployed host has no AppArmor, and podman ignores the option there.
+# unmask=/proc/sys is the deploy units' flag: netavark sets the bridge's sysctls.
 "$ENGINE" run --rm \
   --device /dev/fuse \
   --device /dev/net/tun \
   --security-opt label=disable \
   --security-opt seccomp=unconfined \
   --security-opt apparmor=unconfined \
+  --security-opt unmask=/proc/sys \
   --entrypoint /bin/bash "$IMAGE" -c '
 set -euo pipefail
 export XDG_RUNTIME_DIR=/home/podman/.runtime
@@ -88,6 +90,7 @@ mkdir -p "$XDG_RUNTIME_DIR/podman" && chmod 700 "$XDG_RUNTIME_DIR"
 podman system service --time=0 "unix://$XDG_RUNTIME_DIR/podman/podman.sock" >/dev/null 2>&1 &
 for _ in $(seq 50); do [ -S /var/run/docker.sock ] && break; sleep 0.1; done
 test -S /var/run/docker.sock
+podman info --format "storage: {{.Store.GraphDriverName}} {{json .Store.GraphOptions}}"
 img=registry.access.redhat.com/ubi10/ubi-minimal:latest
 docker pull -q "$img" >/dev/null
 docker version --format "{{.Server.APIVersion}}" >/dev/null

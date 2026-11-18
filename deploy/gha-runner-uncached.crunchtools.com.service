@@ -119,7 +119,11 @@ ExecStartPre=/bin/sh -c 'install -d -m 0700 "$XDG_RUNTIME_DIR/gha-token" && \
 # The runner itself: the token, never the key. --device /dev/fuse and
 # /dev/net/tun are what nested rootless podman needs. label=disable is required
 # for the nested engine; what carries the weight here is the unprivileged user
-# and the slice quota, not SELinux.
+# and the slice quota, not SELinux. unmask=/proc/sys lifts podman's read-only
+# /proc/sys so the nested netavark can set its bridge's sysctls, which every
+# `container:` or `services:` job's network needs (route_localnet; a273c).
+# Rootless, the kernel still refuses any sysctl outside the network namespaces
+# this user owns: nothing host-wide becomes writable.
 #
 # No state mount, and the storage is a tmpfs: see the header. 16g holds a cold
 # trentina build (base images, the dependency layer, the finished image) with
@@ -133,6 +137,7 @@ ExecStart=/usr/bin/podman run --rm --name gha-runner-uncached \
   --device /dev/fuse \
   --device /dev/net/tun \
   --security-opt label=disable \
+  --security-opt unmask=/proc/sys \
   --env-file /srv/gha-runner-uncached.crunchtools.com/config/gha-runner-uncached.env \
   -v /run/gha-runner-uncached/gha-token:/run/gha:U \
   --mount type=tmpfs,destination=/home/podman/.local/share/containers,tmpfs-size=16g,tmpfs-mode=0700,U=true \
