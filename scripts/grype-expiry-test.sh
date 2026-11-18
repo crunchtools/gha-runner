@@ -32,4 +32,11 @@ expect 2 "today not canonical"    2026-1-5   "$one"
 rm -f "$dir/g.yaml"
 set +e; ./grype-expiry.sh "$dir/absent.yaml" 2026-11-18 >/dev/null; got=$?; set -e
 [ "$got" = 0 ] && echo "ok   absent file" || { echo "FAIL absent file: exit $got"; fail=1; }
+if [ "$(id -u)" != 0 ]; then
+  printf '%s' "$one" > "$dir/locked.yaml" && chmod 000 "$dir/locked.yaml"
+  set +e; ./grype-expiry.sh "$dir/locked.yaml" 2026-11-18 >/dev/null 2>&1; got=$?; set -e
+  [ "$got" = 2 ] && echo "ok   unreadable file" || { echo "FAIL unreadable file: exit $got, want 2"; fail=1; }
+else
+  echo "skip unreadable file (root reads it anyway)"
+fi
 exit "$fail"
