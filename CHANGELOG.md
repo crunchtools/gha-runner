@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **skopeo** (a308). constitution's `container-release.yml` calls it in `build`
+  (tagging a pull request's image `pr-N` by digest) and in `mark`, so private
+  repos' container releases can run here instead of on GitHub's machines. The
+  smoke test checks it.
+
 ## [1.1.0] - 2026-11-18
 
 ### Added
