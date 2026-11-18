@@ -90,9 +90,10 @@ def entry_lines(text: str) -> list[int]:
         return []
     if not isinstance(root, yaml.MappingNode):
         raise ValueError("the top level is not a mapping")
-    for key, value in root.value:
-        if key.value != "ignore":
-            continue
+    lists = [value for key, value in root.value if key.value == "ignore"]
+    if len(lists) > 1:
+        raise ValueError("`ignore` appears more than once; grype would read only one of them")
+    for value in lists:
         if isinstance(value, yaml.ScalarNode) and value.tag == "tag:yaml.org,2002:null":
             return []
         if not isinstance(value, yaml.SequenceNode):

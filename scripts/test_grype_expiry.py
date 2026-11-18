@@ -77,6 +77,7 @@ class GrypeExpiry(unittest.TestCase):
         self.assertEqual(self.run_on({".grype.yaml": "ignore: {vulnerability: A}\n"}), 1)
         self.assertEqual(self.run_on({".grype.yaml": "ignore: [\n"}), 1)
         self.assertEqual(self.run_on({".grype.yaml": "ignore\n"}), 1)
+        self.assertEqual(self.run_on({".grype.yaml": "ignore: []\nignore:\n  - vulnerability: A\n"}), 1)
         self.assertEqual(self.run_on({".grype.yaml": "- vulnerability: A\n"}), 1)
         aliased = (
             "# EXPIRES 2026-12-18\nbase: &x {vulnerability: A}\nignore:\n  - vulnerability: B\n"
