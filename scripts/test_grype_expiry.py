@@ -68,6 +68,8 @@ class GrypeExpiry(unittest.TestCase):
         self.assertEqual(self.run_on({".grype.yaml": "# nothing ignored\n"}), 0)
         for empty in ("ignore: []\n", "ignore:\n", "ignore: ~\n", "ignore: null\n", "ignore: Null\n", "ignore: NULL\n"):
             self.assertEqual(self.run_on({".grype.yaml": empty}), 0, empty)
+        for quoted in ('ignore: "null"\n', "ignore: '~'\n", 'ignore: ""\n'):  # strings, not null
+            self.assertEqual(self.run_on({".grype.yaml": quoted}), 1, quoted)
 
     def test_other_configs_grype_loads_fail(self) -> None:
         for name in (".grype.yml", ".grype/config.yaml", ".grype/config.yml"):
