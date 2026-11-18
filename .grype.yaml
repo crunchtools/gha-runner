@@ -1,0 +1,19 @@
+# Each ignore is one vulnerability in one package at one version, with why.
+# Pinned to the vulnerable version so a fixed build leaves the ignore on its own.
+ignore:
+  # Compiled into Fedora's podman-5.8.9 RPM binary; `dnf -y upgrade` already
+  # takes any rebuild. Tracked: https://github.com/crunchtools/gha-runner/issues/26
+  - vulnerability: GHSA-p77j-4mvh-x3m3
+    package:
+      name: google.golang.org/grpc
+      version: v1.72.2
+  - vulnerability: GO-2026-6612
+    package:
+      name: golang.org/x/net
+      version: v0.57.0
+  # grype reads the RPM's main module as a pseudo-version; the binary is
+  # podman 5.8.9, past the 5.8.8 fix. Same issue.
+  - vulnerability: GHSA-2cvf-wqm6-wr9g
+    package:
+      name: github.com/containers/podman/v5
+      version: v5.0.0-20261012000000-9c608fd3e228+dirty

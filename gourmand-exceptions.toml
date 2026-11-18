@@ -1,0 +1,7 @@
+# Gourmand exceptions: findings that are the repo's design, each with a reason.
+
+[[exceptions]]
+check = "CH001-absolute_paths"
+path = "gatehouse-findings.toml"
+justification = "Each judged finding quotes its evidence verbatim, and Gatehouse matches the judgement to the finding by that text; the paths are the Containerfile's, quoted, not paths this file reads."
+classification = "by_design"

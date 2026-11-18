@@ -123,32 +123,29 @@ service runs reports nothing, which is not the same as reporting a problem.
 
 ## A shared, read-only image store
 
-Optional. Mount a warmed container store read-only at `/var/lib/shared` and
-every job reads the images in it without pulling, while its own writable
-storage stays as it was: the cached runner's layer cache, the uncached one's
-empty tmpfs. With nothing mounted the base image's empty skeleton is there and
-nothing changes.
+Opt-in, per runner. Mount a warmed store read-only and name it in the env file:
 
 ```
--v /srv/gha-shared-images/store:/var/lib/shared:ro
+# in the unit's podman run
+-v /srv/gha-shared-images/store:/var/lib/shared-images:ro
+# in gha-runner-*.env
+GHA_SHARED_IMAGES=/var/lib/shared-images
 ```
 
-The path is the base image's own: quay.io/podman/stable's
-`/etc/containers/storage.conf` already lists `/var/lib/shared` under
-`additionalimagestores`, for root and for the rootless `podman` user, so the
-image adds no config of its own. Warm the store with this image, as the user
-the runner runs as, so its layers carry the ownership the runner's podman reads:
-
-```bash
-podman run --rm --device /dev/fuse --security-opt label=disable \
-  -v /srv/gha-shared-images/store:/store:U \
-  --entrypoint podman quay.io/crunchtools/gha-runner:main \
-  --root /store pull <image>
-```
+At start, `shared-images.sh` writes the podman user's `storage.conf` with that
+path under `additionalimagestores`, on fuse-overlayfs with
+`force_mask = "shared"`. That is what Exedore measured working: the store's
+files are 0700 under an id the runner's user namespace does not map, which
+native overlay can neither read nor copy up from. Jobs then run the store's
+images without pulling and keep their own writable storage. fuse-overlayfs is
+slower for a runner's own builds, so it is enabled per runner class, not by
+default: with `GHA_SHARED_IMAGES` unset, or naming a path that is not there,
+nothing is written and podman's storage is exactly as before.
 
 Read-only is the point: a job can use an image from the store and cannot
 change, add or remove one, so nothing a job does reaches the next job through
-it. `scripts/smoke-test.sh` checks both halves before the image is published.
+it. `scripts/smoke-test.sh` checks the store, the read-only half, and that
+nothing changes when the variable is unset.
 
 ## Job containers and services
 

@@ -102,10 +102,12 @@ RUN curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 -o /tmp/runner.tar.g
 # a directory is permission to unlink a file in it whatever the file's own mode
 # says. /usr/local/bin is root-owned and nothing here ever runs as root.
 USER 0
-COPY scripts/entrypoint.sh scripts/mint-registration-token.sh scripts/job-completed.sh /usr/local/bin/
+COPY scripts/entrypoint.sh scripts/mint-registration-token.sh scripts/job-completed.sh scripts/shared-images.sh /usr/local/bin/
 RUN chmod 0555 /usr/local/bin/entrypoint.sh \
       /usr/local/bin/mint-registration-token.sh \
-      /usr/local/bin/job-completed.sh
+      /usr/local/bin/job-completed.sh \
+      /usr/local/bin/shared-images.sh \
+ && test -x /usr/bin/fuse-overlayfs
 
 USER 1000
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

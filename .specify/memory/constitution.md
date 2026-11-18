@@ -98,10 +98,9 @@ what carries Fedora's fixes in.
   mount is read-only and that unlink has to be real); and, on the uncached
   runner only, the nested container storage, capped in size and charged to the
   slice like the job itself. Optionally, on either runner, one shared image
-  store mounted READ-ONLY at `/var/lib/shared`, the base image's own
-  additional image store: jobs read images from it and cannot write, add or
-  remove one, so it carries nothing from one job to the next. With it absent
-  nothing changes.
+  store mounted READ-ONLY and named by `GHA_SHARED_IMAGES`: jobs read images
+  from it and cannot write, add or remove one, so it carries nothing from one
+  job to the next. Unset, the runner's storage is as it was.
 - **Ephemeral registration, one job per container, on both.** A registration
   token is minted per container start by a separate short-lived container that
   alone holds the GitHub App private key; the runner registers `--ephemeral`,

@@ -101,12 +101,20 @@ docker rm -f smoke_job smoke_svc >/dev/null
 docker network rm smoke_net >/dev/null
 echo "job container and service: ok"'
 
-echo "== a read-only shared image store at /var/lib/shared"
-# Warmed by this image as its own user, the way the README says to warm it on
-# the host; then mounted read-only, as the deploy mounts it. An image only the
-# store holds must run without a pull, and the store must refuse a write.
+echo "== GHA_SHARED_IMAGES unset or missing: storage.conf untouched"
+run_in_image 'set -euo pipefail
+conf=$HOME/.config/containers/storage.conf
+/usr/local/bin/shared-images.sh
+test ! -e "$conf"
+GHA_SHARED_IMAGES=/nowhere /usr/local/bin/shared-images.sh 2>/dev/null
+test ! -e "$conf"
+echo "unset and missing: ok"'
+
+echo "== GHA_SHARED_IMAGES set: a read-only store's image runs without a pull"
+# Warmed by this image as its own user, as the README says to warm it, then
+# mounted read-only, as a unit mounts it.
 store=$(mktemp -d)
-trap 'rm -rf "$store" 2>/dev/null || "$ENGINE" unshare rm -rf "$store" 2>/dev/null || true' EXIT
+trap '"$ENGINE" unshare rm -rf "$store" 2>/dev/null || rm -rf "$store" 2>/dev/null || true' EXIT
 "$ENGINE" run --rm \
   --device /dev/fuse \
   --security-opt label=disable \
@@ -120,12 +128,15 @@ podman --root /store tag registry.access.redhat.com/ubi10/ubi-micro:latest local
   --device /dev/fuse \
   --security-opt label=disable \
   --security-opt seccomp=unconfined \
-  -v "$store":/var/lib/shared:ro \
+  -v "$store":/var/lib/shared-images:ro \
+  -e GHA_SHARED_IMAGES=/var/lib/shared-images \
   --entrypoint /bin/bash "$IMAGE" -c '
 set -euo pipefail
+/usr/local/bin/shared-images.sh
+grep -q "force_mask = \"shared\"" "$HOME/.config/containers/storage.conf"
 podman run --rm --pull=never localhost/only-in-store:smoke /bin/true
 echo "image from the store, no pull: ok"
-if touch /var/lib/shared/overlay-images/written 2>/dev/null; then
+if touch /var/lib/shared-images/written 2>/dev/null; then
   echo "the shared store took a write" >&2; exit 1
 fi
 if podman rmi localhost/only-in-store:smoke >/dev/null 2>&1 \

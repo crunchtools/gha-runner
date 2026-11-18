@@ -17,12 +17,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- **A shared, read-only image store.** Mount a warmed store read-only at
-  `/var/lib/shared`, the base image's own additional image store, and jobs run
-  its images without pulling while their own storage stays as it was. With no
-  mount nothing changes. The README says how to warm it; the smoke test checks
-  that an image only the store holds runs with `--pull=never` and that a job
-  cannot write to the store.
+- **A shared, read-only image store, opt-in.** With `GHA_SHARED_IMAGES` set
+  to a store the unit mounts read-only, the entrypoint writes the podman
+  user's `storage.conf` to read it as an additional image store, on
+  fuse-overlayfs with `force_mask = "shared"`, so jobs run its images without
+  pulling. Unset, nothing is written and storage is as before. The smoke test
+  covers both, and that a job cannot write to the store.
 - Constitution 1.4.0 permits that mount and says what the docker.sock link
   grants.
 
