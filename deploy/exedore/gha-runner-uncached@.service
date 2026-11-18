@@ -51,11 +51,15 @@ ExecStartPre=/bin/sh -c 'install -d -m 0700 "$XDG_RUNTIME_DIR/gha-token" && \
   > "$XDG_RUNTIME_DIR/gha-token/regtoken" && \
   chmod 0600 "$XDG_RUNTIME_DIR/gha-token/regtoken"'
 
+# unmask=/proc/sys lets the nested netavark set its bridge's sysctls, which
+# every `container:` or `services:` job's network needs (a273c). Rootless, the
+# kernel still refuses any sysctl outside this user's own network namespaces.
 ExecStart=/usr/bin/podman run --rm --name gha-runner-uncached%i \
   --label PODMAN_SYSTEMD_UNIT=gha-runner-uncached@%i.service \
   --device /dev/fuse \
   --device /dev/net/tun \
   --security-opt label=disable \
+  --security-opt unmask=/proc/sys \
   --env-file /srv/gha-runner/config/gha-runner-uncached.env \
   -e GHA_RUNNER_NAME=exedore-uncached%i \
   -v /run/gha-runner-uncached%i/gha-token:/run/gha:U \
