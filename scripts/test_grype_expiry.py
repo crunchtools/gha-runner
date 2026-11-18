@@ -1,5 +1,7 @@
 """Tests for grype_expiry.py, with fixture repos and a fixed `today`."""
 
+import contextlib
+import io
 import os
 import tempfile
 import unittest
@@ -64,7 +66,8 @@ class GrypeExpiry(unittest.TestCase):
     def test_nothing_to_expire(self) -> None:
         self.assertEqual(self.run_on({}), 0)
         self.assertEqual(self.run_on({".grype.yaml": "# nothing ignored\n"}), 0)
-        self.assertEqual(self.run_on({".grype.yaml": "ignore: []\n"}), 0)
+        for empty in ("ignore: []\n", "ignore:\n", "ignore: ~\n", "ignore: null\n", "ignore: Null\n", "ignore: NULL\n"):
+            self.assertEqual(self.run_on({".grype.yaml": empty}), 0, empty)
 
     def test_other_configs_grype_loads_fail(self) -> None:
         for name in (".grype.yml", ".grype/config.yaml", ".grype/config.yml"):
@@ -95,6 +98,18 @@ class GrypeExpiry(unittest.TestCase):
             Path(root, ".grype.yaml").write_text(DATED)
             with mock.patch.object(Path, "read_text", side_effect=PermissionError("denied")):
                 return grype_expiry.main(["grype_expiry.py", root, TODAY])
+
+    def test_findings_name_the_entry_line(self) -> None:
+        text = "# EXPIRES 2026-12-18\nignore:\n  - vulnerability: A\n  # EXPIRES 2026-01-01\n  - package: {name: x}\n"
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(self.run_on({".grype.yaml": text}), 1)
+        self.assertIn(".grype.yaml:3 expires 2026-12-18", out.getvalue())
+        self.assertIn("::error::.grype.yaml:5: this grype ignore expired on 2026-01-01", out.getvalue())
+        undated = io.StringIO()
+        with contextlib.redirect_stdout(undated):
+            self.run_on({".grype.yaml": "x: 1\nignore:\n  - fix-state: unknown\n"})
+        self.assertIn(".grype.yaml:3: this grype ignore has no EXPIRES date above it", undated.getvalue())
 
     def test_this_repos_file(self) -> None:
         repo = Path(__file__).parent.parent

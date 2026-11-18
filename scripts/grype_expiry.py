@@ -91,7 +91,7 @@ def entry_lines(text: str) -> list[int]:
     for key, value in root.value:
         if key.value != "ignore":
             continue
-        if isinstance(value, yaml.ScalarNode) and value.value in ("", "~", "null"):
+        if isinstance(value, yaml.ScalarNode) and value.tag == "tag:yaml.org,2002:null":
             return []
         if not isinstance(value, yaml.SequenceNode):
             raise ValueError("`ignore` is not a list")
