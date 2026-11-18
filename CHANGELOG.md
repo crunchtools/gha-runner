@@ -8,6 +8,19 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **Red Hat images pull again, still signature-verified** (a358). From
+  2026-11-18, Red Hat logs new sigstore signatures in a Rekor log (logID
+  `1231502a…`) whose key no package ships yet. containers-common's policy
+  checked every Rekor SET against `/etc/pki/sigstore/REKOR-signing-key`
+  (logID `ca942090…`), so each freshly signed ubi10/ubi9 image was rejected
+  ("cryptographic signature verification of Rekor SET failed"), and every
+  build FROM ubi10 on the pool failed. The image now ships
+  `/etc/containers/policy.json`. It still requires Red Hat's release3 sigstore
+  signature for `registry.access.redhat.com` and `registry.redhat.io`, and
+  drops only the Rekor SET requirement until Red Hat publishes the new key.
+  The smoke test pulls ubi10-minimal with the shipped policy, and fails if
+  the same policy with the wrong key accepts it.
+
 - **The Exedore unit templates match what runs there** (a315). After the libssl
   outage, the deployed `gha-runner-{cached,uncached}@.service` run
   `quay.io/crunchtools/gha-runner@sha256:9f8aa398…` (1.1.1) with
