@@ -50,7 +50,8 @@ USER 0
 # was found") -- every Exedore runner crash-looped on that. The smoke test
 # registers against a bogus token to load libssl the way a real start does.
 # git/tar/gzip are actions/checkout's; jq and openssl sign the GitHub App JWT in
-# the entrypoint.
+# the entrypoint. skopeo is constitution container-release.yml's: build tags a
+# pull request's image pr-N and mark tags it gated, registry to registry by digest.
 #
 # The rest is what jobs held on GitHub's machines need to come here (a283):
 # shellcheck (josui-skills), python3-pip (hermes' pin verifier tests), and the
@@ -71,7 +72,7 @@ RUN : "upgrade ${UPGRADE_STAMP}" \
  && dnf -y install --setopt=install_weak_deps=0 \
       lttng-ust openssl-libs openssl3-libs krb5-libs zlib libicu \
       git tar gzip findutils which procps-ng hostname \
-      jq openssl \
+      jq openssl skopeo \
       shellcheck python3-pip \
       nss nspr atk at-spi2-atk cups-libs dbus-libs libdrm mesa-libgbm \
       pango cairo alsa-lib expat libX11 libxcb libXcomposite libXdamage \

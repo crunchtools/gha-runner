@@ -49,9 +49,10 @@ run_in_image 'gh --version | head -1'
 
 # What jobs held on GitHub's machines need (a283). The libraries are the ones
 # puppeteer's Chrome links beyond this base, from ldd on Chrome for Testing 158.
-echo "== shellcheck, pip, and Chrome's shared libraries"
+echo "== shellcheck, skopeo, pip, and Chrome's shared libraries"
 run_in_image 'set -euo pipefail
 shellcheck --version | sed -n 2p
+skopeo --version
 python3 -m pip --version
 missing=
 for lib in libnss3.so libnssutil3.so libsmime3.so libnspr4.so libatk-1.0.so.0 \
