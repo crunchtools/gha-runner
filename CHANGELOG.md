@@ -18,6 +18,9 @@ All notable changes to this project are documented here. The format follows
   its bridge's `route_localnet` on the read-only `/proc/sys`, and no job's
   named network starts (found on Exedore). Rootless, nothing host-wide becomes
   writable.
+- `.grype.yaml` ignores the three Critical Go CVEs compiled into Fedora's
+  podman 5.8.9 binary, each pinned to its vulnerable version and expiring
+  2026-12-18; podman 6 fixes them (#26, #28).
 
 ### Added
 

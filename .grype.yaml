@@ -1,5 +1,8 @@
 # Each ignore is one vulnerability in one package at one version, with why.
 # Pinned to the vulnerable version so a fixed build leaves the ignore on its own.
+# EXPIRES 2026-12-18 (Josui Prime, a273): every entry here goes by then. The
+# fixed build is podman 6 (quay.io/podman/stable:v6.2.0-immutable), which needs
+# its own pull request for storage reasons: crunchtools/gha-runner#28.
 ignore:
   # This and the next: Go modules compiled into Fedora's podman-5.8.9 RPM
   # binary, which this repo cannot rebuild; `dnf -y upgrade` takes Fedora's
