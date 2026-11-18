@@ -1,7 +1,8 @@
 # deploy/exedore's runner units must run an image pinned by digest (a315): a
 # merged :main pulled with --pull=newer is how one bad merge took down every
 # Exedore runner. scripts/deploy-units-test.sh needs only bash and grep, so it
-# runs on the runner itself.
+# runs on the runner itself, as does scripts/gha-runner-prune-test.sh (a stub
+# podman against a temporary store).
 
 name: deploy units
 
@@ -35,3 +36,5 @@ jobs:
           persist-credentials: false
       - name: Both runner units pin the image by digest
         run: bash scripts/deploy-units-test.sh
+      - name: gha-runner-prune's keep list, age and failure branches
+        run: bash scripts/gha-runner-prune-test.sh

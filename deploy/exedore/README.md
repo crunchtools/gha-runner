@@ -11,7 +11,8 @@ two-container mint as the retired gloval pair; the unit headers say what differs
 | Env (no secrets) | `/srv/gha-runner/config/gha-runner-{cached,uncached}.env` |
 | Fence | `/etc/nftables/gha-runner-egress.nft` |
 | Provisioning | `/srv/gha-runner/bin/gha-runner-instance` |
-| Storage | `/var/mnt/onsite/gha-runner-cache` = 200G XFS loop image `/var/mnt/onsite/gha-runner-cache.img` |
+| Storage | `/var/mnt/onsite/gha-runner-cache` = 400G XFS loop image `/var/mnt/onsite/gha-runner-cache.img` |
+| Pruning | `gha-runner-prune.timer` / `.service`, `/srv/gha-runner/bin/gha-runner-prune` |
 | Shared image store | `/var/mnt/onsite/gha-runner-cache/shared-images`, owned by `ghimages` (uid 2090), warmed by `gha-images-warm.timer` from `/srv/gha-runner/config/shared-images.list` |
 | App key | OpenBao `kv/exedore/gha-runner/gha-app.pem` (canonical), copied to `kv/exedore/gha-runner-<inst>/`, delivered by `srv-secrets@gha-runner-<inst>` |
 
@@ -30,9 +31,11 @@ AppRole, so an escape from one instance reaches neither another's cache nor its 
   only limit. Under saturation the OOM killer acts inside the slice and kills a
   job, never a seat.
 - Disk: the image's size is the cap. `df -h /var/mnt/onsite/gha-runner-cache`
-  shows 200G no matter what the backup volume holds. Uncached scratch lives on
+  shows 400G no matter what the backup volume holds (200G until a315 filled
+  it; the mount unit says how to grow it online). Uncached scratch lives on
   disk in the same filesystem and is wiped before and after every job. It is
-  never tmpfs, because tmpfs is charged to the slice's memory.
+  never tmpfs, because tmpfs is charged to the slice's memory. Cached stores
+  are pruned daily, below.
 - Network: runner users (uids 2100-2199) and `ghimages` (2090) cannot reach the host (loopback, so
   OpenBao, and every local address), the seats' bridge 10.88/16, WireGuard,
   or the LAN, multicast and broadcast included. The LAN resolver is the one
@@ -42,7 +45,7 @@ AppRole, so an escape from one instance reaches neither another's cache nor its 
 ## Shared image store (a276)
 
 `gha-images-warm.timer` runs hourly and 5 minutes after boot. It pulls the
-images in `shared-images.list` into one read-only store inside the 200G
+images in `shared-images.list` into one read-only store inside the 400G
 filesystem. The first warm took 255s. The store is ~4G, grows with the list,
 and a run with nothing new takes about 30s. A version that loses its tag is
 pruned one run later, so a job already using it keeps its layers. Jobs read
@@ -72,6 +75,18 @@ of onsite.
 To add an image, add a line to the list and run
 `systemctl start gha-images-warm`. Read the outcome with
 `journalctl -u gha-images-warm -n 20`.
+
+## Pruning the cached stores (a315)
+
+Unpruned, each cached store grew to 40-45G and filled the filesystem
+(ENOSPC). `gha-runner-prune.timer` fires daily and leaves `prune-requested` in
+each cached runner's home. The runner prunes in its own `ExecStartPre`, between
+two jobs, so nothing is pruned under a running job. It removes tagged images
+created more than 7 days ago (except those `shared-images.list` names), the
+build layer cache, and leftover build containers. An idle runner prunes after
+its next job. Force one now with `systemctl start gha-runner-prune`. Read the
+result in the runner's journal:
+`journalctl -u gha-runner-cached@1 -g gha-runner-prune`.
 
 ## Scale
 

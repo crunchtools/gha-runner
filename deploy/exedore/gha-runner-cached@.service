@@ -9,7 +9,7 @@
 #   instance has its own layer cache, and a job that escapes instance 1 must
 #   not be able to write into the cache instance 2's next job builds from.
 #
-#   Storage lives in a 200G XFS loop image on the onsite backup volume
+#   Storage lives in a 400G XFS loop image on the onsite backup volume
 #   (/var/mnt/onsite/gha-runner-cache, see the .mount unit). The cap is the
 #   filesystem's size, so the runners can fill it and never the backups.
 #
@@ -42,18 +42,36 @@ WorkingDirectory=/var/mnt/onsite/gha-runner-cache/cached%i/home
 # Hide every other service's /srv tree and everything else on the backup
 # volume; keep our config read-only and our own instance directory writable.
 TemporaryFileSystem=/var/srv:ro
-BindReadOnlyPaths=/var/srv/gha-runner/config
+BindReadOnlyPaths=/var/srv/gha-runner/config /var/srv/gha-runner/bin
 TemporaryFileSystem=/var/mnt/onsite:ro
 BindPaths=/var/mnt/onsite/gha-runner-cache/cached%i
 
 Restart=always
 RestartSec=5
+# A day's prune of a 40G store outlasts the 90s default (a315).
+TimeoutStartSec=20min
 
 # Pinned by digest, pulled only when missing: a merged image never reaches the
 # pool on its own. :main with --pull=newer did exactly that, and one bad merge
 # (libssl) crash-looped every runner. A new image arrives only by promotion,
 # README "Promoting a new image"; scripts/deploy-units-test.sh refuses :main.
 ExecStartPre=-/usr/bin/podman rm -f gha-runner-cached%i
+# The layer cache's daily prune (a315), here because this is the one moment no
+# job can be running: the last container is gone and the next is not yet
+# registered, so GitHub hands jobs to the other runners meanwhile.
+# gha-runner-prune.timer leaves the flag; it is removed before the prune, so a
+# failing prune is tried once a day, not before every job, and `-` keeps a
+# failure from holding the runner down.
+ExecStartPre=-/bin/sh -c 'f=/var/mnt/onsite/gha-runner-cache/cached%i/home/prune-requested; \
+  [ -e "$$f" ] || exit 0; rm -f "$$f"; \
+  exec /usr/bin/podman run --rm --pull=missing --name gha-runner-cached%i-prune \
+  --network none --device /dev/fuse --security-opt label=disable \
+  -v /var/mnt/onsite/gha-runner-cache/cached%i/containers:/home/podman/.local/share/containers \
+  -v /srv/gha-runner/bin/gha-runner-prune:/usr/local/libexec/gha-runner-prune:ro \
+  -v /srv/gha-runner/config/shared-images.list:/run/shared-images.list:ro \
+  --entrypoint /bin/bash \
+  quay.io/crunchtools/gha-runner@sha256:9f8aa398d3d49de17ce4da6b9d102d947c22e5c078596fa84b2cf6a64d591b6b \
+  /usr/local/libexec/gha-runner-prune /run/shared-images.list'
 ExecStartPre=/bin/sh -c 'install -d -m 0700 "$XDG_RUNTIME_DIR/gha-token" && \
   /usr/bin/podman run --rm --pull=missing --name gha-runner-cached%i-mint \
   --env-file /srv/gha-runner/config/gha-runner-cached.env \

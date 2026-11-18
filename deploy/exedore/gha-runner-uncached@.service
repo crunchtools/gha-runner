@@ -5,7 +5,7 @@
 # storage is a DISK directory wiped before and after every job, never a tmpfs.
 # A tmpfs is charged to the cgroup's memory, and 16G of build layers inside a
 # 24G slice shared by six runners is an OOM waiting for a cold build. The directory sits in the same
-# 200G loop filesystem as the cached runners, so it shares that cap.
+# 400G loop filesystem as the cached runners, so it shares that cap.
 #
 # The wipe runs as this user inside its own user namespace (podman unshare):
 # nested builds leave files owned by many subuids, which the user cannot

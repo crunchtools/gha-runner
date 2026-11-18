@@ -1,0 +1,62 @@
+#!/bin/bash
+# gha-runner-prune -- prune one cached runner's nested image store (a315).
+# Installed at /srv/gha-runner/bin/gha-runner-prune. gha-runner-cached@.service
+# runs it inside the runner image, with the store mounted where a job sees it,
+# in the gap between two jobs: after the old container is gone and before the
+# new one registers, so no job is running and none is held up. It runs at most
+# once a day, when gha-runner-prune.timer has left prune-requested in the
+# runner's home.
+#
+# Without it each cached store grew to 40-45G and the 200G filesystem filled
+# (ENOSPC on private-repo jobs, a315). It removes:
+#   - tagged images created more than PRUNE_AGE ago, except those
+#     shared-images.list names (gha-images-warm keeps the same set warm);
+#   - dangling images, which are the build layer cache, and
+#     --mount=type=cache data;
+#   - build containers a cancelled build left behind.
+#
+# `until` is an image's creation time, not its last use: an old base image a
+# job pulls every day is removed daily and pulled again by its next job. The
+# keep list holds the ones that matter.
+#
+# Usage: gha-runner-prune [shared-images.list]
+set -euo pipefail
+
+LIST=${1:-/srv/gha-runner/config/shared-images.list}
+AGE=${PRUNE_AGE:-168h}
+STORE=${PRUNE_STORE:-$HOME/.local/share/containers}
+
+echo "gha-runner-prune: before $(du -sh "$STORE" 2>/dev/null | cut -f1)"
+
+# The keep set is image IDs, so another tag of a listed image is kept too.
+declare -A keep=()
+if [ -s "$LIST" ]; then
+  while read -r ref; do
+    id=$(podman image inspect --format '{{.Id}}' "$ref" 2>/dev/null) || continue
+    keep[$id]=1
+  done < <(grep -vE '^[[:space:]]*(#|$)' "$LIST")
+else
+  echo "gha-runner-prune: warning: $LIST missing or empty, keeping nothing extra" >&2
+fi
+
+removed=0
+while read -r id ref; do
+  [ -n "$id" ] || continue
+  # `images --no-trunc` prefixes the ID with sha256:, `image inspect` does not.
+  id=${id#sha256:}
+  # Untagged rows are layers, left to the dangling prune below.
+  case $ref in *'<none>'*) continue ;; esac
+  [ -n "${keep[$id]:-}" ] && continue
+  # By ref, never by ID: removing a tag needs no --force.
+  if podman rmi "$ref" >/dev/null 2>&1; then
+    echo "removed $ref"
+    removed=$((removed + 1))
+  else
+    echo "gha-runner-prune: could not remove $ref" >&2
+  fi
+done < <(podman images --no-trunc --filter "until=$AGE" --format '{{.ID}} {{.Repository}}:{{.Tag}}')
+
+podman image prune -f --build-cache >/dev/null
+podman system prune -f --build >/dev/null
+
+echo "gha-runner-prune: removed $removed tagged image(s); after $(du -sh "$STORE" 2>/dev/null | cut -f1)"
