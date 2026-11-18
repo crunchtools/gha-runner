@@ -97,6 +97,34 @@ that instance, then remove images as its user with
 `podman unshare` against `cachedN/containers`, or grow the filesystem.
 Alert on `/var/mnt/onsite/gha-runner-cache` usage as the backstop.
 
+## What the cached store does not guarantee (a367)
+
+The signature policy (`/etc/containers/policy.json`, release3 for
+`registry.access.redhat.com` and `registry.redhat.io`) checks a manifest when
+it is pulled, never a layer already on disk. Every job on a cached instance
+can write that instance's store, so a job can leave a doctored layer that
+the next job's verified pull reuses. Measured on 2026-11-18 under this
+policy: one job pulls ubi10-micro, tags it under another name, edits a file
+in the layer and untags the Red Hat name. The next job runs
+`podman build --pull=always FROM ubi10-micro`, which passes the release3
+check and then builds on the edited file. Removing Red Hat images between
+jobs, pinned or not, does not close this, because the layer survives under
+the other name. Re-pulling every job doesn't either: `--pull=always` reuses
+local layers by digest. Only a store that starts empty closes it, and that
+store is the uncached pool.
+
+The pool is safe to run anyway because of where it draws the line, not
+because of the policy. The cached pool runs only same-repository pull
+requests from authors with write access, never a fork's or Dependabot's.
+No job there holds a secret or publishes. What ships, and every job that
+holds a credential, runs on a fresh store: `container-release.yml`'s `build`
+(`--pull=always`) and `mark` on the uncached pool or GitHub's machines.
+So a poisoned store can fake a green pull-request check, or read a later
+job's checkout on the same instance, private repositories included. It
+can't reach a release or a credential. Keep it that way. Never move a job
+that holds a secret or pushes an image onto `CACHED_RUNNER_LABEL`, and don't
+treat the policy as protection for anything built on this pool.
+
 ## Scale
 
 - Within the provisioned set: `systemctl disable --now gha-runner-cached@4`, then
