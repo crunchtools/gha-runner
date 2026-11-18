@@ -23,14 +23,14 @@ setup() {
   case=$1
   t=$(mktemp -d -p "$root")
   mkdir -p "$t/bin" "$t/store" "$t/home"
-  touch "$t/dangling" "$t/fail-pulls" "$t/store-calls"
+  touch "$t/dangling" "$t/fail-pulls" "$t/store-calls" "$t/run-calls"
   printf '# a comment\n\nquay.io/x/one:latest\n   # indented comment\nquay.io/x/two:main\n' > "$t/list"
   cat > "$t/bin/podman" <<'STUB'
 #!/bin/bash
 set -euo pipefail
 case $1 in
   unshare) shift; exec "$@" ;;
-  run) ;;
+  run) echo "$*" >> "$STUB/run-calls" ;;
   *) echo "stub podman: unexpected $*" >&2; exit 99 ;;
 esac
 while [ $# -gt 0 ] && [ "$1" != overlay.force_mask=shared ]; do shift; done
@@ -60,6 +60,22 @@ run_warm() {
 called() { grep -qx -- "$1" "$t/store-calls"; }
 not_called() { ! grep -q -- "$1" "$t/store-calls"; }
 said() { grep -qx -- "$2" "$t/$1"; }
+
+# The runner image the warm container runs: the units' pinned digest (a315).
+pinned=$(grep -o 'quay\.io/crunchtools/gha-runner@sha256:[0-9a-f]\{64\}' \
+  "$(dirname "$warm")/gha-runner-cached@.service" | head -1)
+
+setup "the runner image is pinned and pulled only when missing"
+run_warm
+expect "exits 0, got $rc" [ "$rc" -eq 0 ]
+expect "the units pin a digest" [ -n "$pinned" ]
+expect "every store command runs a container" [ "$(wc -l < "$t/run-calls")" -eq "$(wc -l < "$t/store-calls")" ]
+expect "every one runs the units' digest" \
+  bash -c '! grep -vF -- " $1 " "$0"' "$t/run-calls" "$pinned"
+expect "every one pulls only when missing" \
+  bash -c '! grep -v -- "--pull=missing" "$0"' "$t/run-calls"
+expect "none pulls newer" bash -c '! grep -q -- "--pull=newer" "$0"' "$t/run-calls"
+expect "none runs :main" bash -c '! grep -q "gha-runner:main" "$0"' "$t/run-calls"
 
 setup "empty list"
 printf '# nothing\n\n   \n' > "$t/list"

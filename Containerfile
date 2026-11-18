@@ -52,6 +52,10 @@ USER 0
 # git/tar/gzip are actions/checkout's; jq and openssl sign the GitHub App JWT in
 # the entrypoint. skopeo is constitution container-release.yml's: build tags a
 # pull request's image pr-N and mark tags it gated, registry to registry by digest.
+# Floored at 1.25.1 (a315): 1.24.1-1 vendors golang.org/x/net 0.56.0
+# (GO-2026-6612, Critical), and Fedora mirrors still serving it after 1.25.1-2
+# went stable failed container-scan at random. A lagging mirror now fails this
+# step with "No match" instead, and no build can ship the old one.
 #
 # The rest is what jobs held on GitHub's machines need to come here (a283):
 # shellcheck (josui-skills), python3-pip (hermes' pin verifier tests), and the
@@ -72,7 +76,7 @@ RUN : "upgrade ${UPGRADE_STAMP}" \
  && dnf -y install --setopt=install_weak_deps=0 \
       lttng-ust openssl-libs openssl3-libs krb5-libs zlib libicu \
       git tar gzip findutils which procps-ng hostname \
-      jq openssl skopeo \
+      jq openssl 'skopeo >= 1:1.25.1' \
       shellcheck python3-pip \
       nss nspr atk at-spi2-atk cups-libs dbus-libs libdrm mesa-libgbm \
       pango cairo alsa-lib expat libX11 libxcb libXcomposite libXdamage \

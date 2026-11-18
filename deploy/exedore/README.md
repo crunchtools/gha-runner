@@ -11,7 +11,8 @@ two-container mint as the retired gloval pair; the unit headers say what differs
 | Env (no secrets) | `/srv/gha-runner/config/gha-runner-{cached,uncached}.env` |
 | Fence | `/etc/nftables/gha-runner-egress.nft` |
 | Provisioning | `/srv/gha-runner/bin/gha-runner-instance` |
-| Storage | `/var/mnt/onsite/gha-runner-cache` = 200G XFS loop image `/var/mnt/onsite/gha-runner-cache.img` |
+| Storage | `/var/mnt/onsite/gha-runner-cache` = 400G XFS loop image `/var/mnt/onsite/gha-runner-cache.img` |
+| Pruning | `gha-runner-prune.timer` / `.service`, `/srv/gha-runner/bin/gha-runner-prune` |
 | Shared image store | `/var/mnt/onsite/gha-runner-cache/shared-images`, owned by `ghimages` (uid 2090), warmed by `gha-images-warm.timer` from `/srv/gha-runner/config/shared-images.list` |
 | App key | OpenBao `kv/exedore/gha-runner/gha-app.pem` (canonical), copied to `kv/exedore/gha-runner-<inst>/`, delivered by `srv-secrets@gha-runner-<inst>` |
 
@@ -30,9 +31,11 @@ AppRole, so an escape from one instance reaches neither another's cache nor its 
   only limit. Under saturation the OOM killer acts inside the slice and kills a
   job, never a seat.
 - Disk: the image's size is the cap. `df -h /var/mnt/onsite/gha-runner-cache`
-  shows 200G no matter what the backup volume holds. Uncached scratch lives on
+  shows 400G no matter what the backup volume holds (200G until a315 filled
+  it; the mount unit says how to grow it online). Uncached scratch lives on
   disk in the same filesystem and is wiped before and after every job. It is
-  never tmpfs, because tmpfs is charged to the slice's memory.
+  never tmpfs, because tmpfs is charged to the slice's memory. Cached stores
+  are pruned daily, below.
 - Network: runner users (uids 2100-2199) and `ghimages` (2090) cannot reach the host (loopback, so
   OpenBao, and every local address), the seats' bridge 10.88/16, WireGuard,
   or the LAN, multicast and broadcast included. The LAN resolver is the one
@@ -42,7 +45,7 @@ AppRole, so an escape from one instance reaches neither another's cache nor its 
 ## Shared image store (a276)
 
 `gha-images-warm.timer` runs hourly and 5 minutes after boot. It pulls the
-images in `shared-images.list` into one read-only store inside the 200G
+images in `shared-images.list` into one read-only store inside the 400G
 filesystem. The first warm took 255s. The store is ~4G, grows with the list,
 and a run with nothing new takes about 30s. A version that loses its tag is
 pruned one run later, so a job already using it keeps its layers. Jobs read
@@ -73,6 +76,27 @@ To add an image, add a line to the list and run
 `systemctl start gha-images-warm`. Read the outcome with
 `journalctl -u gha-images-warm -n 20`.
 
+## Pruning the cached stores (a315)
+
+Unpruned, each cached store grew to 40-45G and filled the filesystem
+(ENOSPC). `gha-runner-prune.timer` fires daily and touches
+`/run/gha-runner-prune/requested`, a root-owned directory the runners can only
+read. Root never writes in a runner's home. Each cached runner prunes in its
+own `ExecStartPre`, between two jobs, when that file is newer than its
+`home/prune-done`. So nothing is pruned under a running job, and each request
+is tried once. It removes images created more than 7 days ago, tagged or
+pulled by digest, except those `shared-images.list` names and the pinned runner
+image. It also removes the build layer cache and leftover build containers. An
+idle runner prunes after its next job. Force one now with
+`systemctl start gha-runner-prune`. Read the result in the runner's journal:
+`journalctl -u gha-runner-cached@1 -g gha-runner-prune`.
+
+The prune can't rescue a store that is already full: its own container needs
+space to start, and the failure stays in the journal. Recover by hand: stop
+that instance, then remove images as its user with
+`podman unshare` against `cachedN/containers`, or grow the filesystem.
+Alert on `/var/mnt/onsite/gha-runner-cache` usage as the backstop.
+
 ## Scale
 
 - Within the provisioned set: `systemctl disable --now gha-runner-cached@4`, then
@@ -84,6 +108,33 @@ To add an image, add a line to the list and run
   or delete it right away:
   `gh api orgs/crunchtools/actions/runner-groups/<exedore id>/runners`, then
   `gh api -X DELETE orgs/crunchtools/actions/runners/<id>`.
+
+## Promoting a new image
+
+Both units and `gha-images-warm` run `quay.io/crunchtools/gha-runner@sha256:…`
+with `--pull=missing`, never `:main`: a merge does not reach the pool until
+someone promotes it. `scripts/deploy-units-test.sh` fails CI if any of the
+three names `:main` or `--pull=newer`, or if they pin different digests.
+
+1. Resolve the release's digest (tags carry no `v`):
+   `podman pull -q quay.io/crunchtools/gha-runner:1.2.0 && podman image inspect --format '{{.Digest}}' quay.io/crunchtools/gha-runner:1.2.0`.
+2. Verify it by digest, on a host that can run nested containers:
+   `ENGINE=podman scripts/smoke-test.sh quay.io/crunchtools/gha-runner@<digest>`.
+   That includes the bogus-token registration, the TLS round trip the libssl
+   outage failed.
+3. Canary one uncached runner. An instance file overrides the template:
+   `cp /etc/systemd/system/gha-runner-uncached@.service /etc/systemd/system/gha-runner-uncached@1.service`,
+   sed the new digest into that copy, `systemctl daemon-reload`, and
+   `systemctl restart gha-runner-uncached@1` while it is idle (a waiting
+   runner's container already holds the old image). Wait for one green job on
+   `exedore-uncached1`.
+4. Promote: sed the new digest into both templates in `/etc/systemd/system/`
+   and into `/srv/gha-runner/bin/gha-images-warm`, `rm` the canary file,
+   `systemctl daemon-reload`. A runner moves to the new
+   image when its container next starts, so a busy one after its job, an idle
+   one after its next job or an idle restart. Land the same digest in this
+   directory by pull request.
+5. Roll back with the same sed and the old digest.
 
 ## Kill switches
 

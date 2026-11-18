@@ -6,6 +6,41 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Exedore unit templates match what runs there** (a315). After the libssl
+  outage, the deployed `gha-runner-{cached,uncached}@.service` run
+  `quay.io/crunchtools/gha-runner@sha256:9f8aa398…` (1.1.1) with
+  `--pull=missing` instead of `:main` with `--pull=newer`, so a merge no longer
+  reaches the pool by itself. The repo copies now say the same.
+  `deploy/exedore/README.md` "Promoting a new image" gives the steps: verify
+  by digest, canary one uncached runner, then sed and reload.
+  `scripts/deploy-units-test.sh`, run by `deploy-units-test.yml`, fails if
+  either template names `:main` or `--pull=newer`, or if the templates pin
+  different digests. `gha-images-warm` runs the same digest with
+  `--pull=missing`, is promoted with the units, and is checked the same way.
+- **The cached runners' stores are pruned daily** (a315). Each grew to 40-45G
+  unpruned and filled the runner filesystem (ENOSPC on private-repo jobs).
+  `gha-runner-prune.timer` touches `/run/gha-runner-prune/requested`, a
+  root-owned directory the runners can only read. Each cached runner's own
+  `ExecStartPre` runs `gha-runner-prune` between two jobs, never under one,
+  when the request is newer than its stamp. That removes images created more
+  than 7 days ago, tagged or pulled by digest (except those in
+  `shared-images.list` and the pinned runner image), the build layer cache and
+  leftover build containers. The prune container runs with `--init` and
+  `--replace`, so a timed-out prune can't block the next one.
+  `scripts/gha-runner-prune-test.sh` tests it with a stub podman, including
+  the timer-to-runner handoff taken from the unit files.
+- **skopeo is floored at 1.25.1** (a315). 1.24.1-1 vendors `golang.org/x/net`
+  0.56.0 (GO-2026-6612, Critical). Fedora mirrors still serving it after
+  1.25.1-2 went stable failed `container-scan` at random. A lagging mirror now
+  fails the build with "No match" instead. `sdlc ci` also passes
+  `UPGRADE_STAMP` (`sdlc.toml`), so a cached runner no longer replays an old
+  package layer.
+- **The runner filesystem is 400G** (a315), grown online from 200G. The mount
+  unit's "To grow it" now gives the online steps (`truncate`, `losetup -c`,
+  `xfs_growfs`). The pool doesn't need stopping.
+
 ## [1.1.1] - 2026-11-18
 
 ### Added

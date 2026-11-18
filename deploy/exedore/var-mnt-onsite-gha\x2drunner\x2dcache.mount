@@ -1,17 +1,21 @@
 # Installed at /etc/systemd/system/var-mnt-onsite-gha\x2drunner\x2dcache.mount
 # on exedore (a264).
 #
-# The runners' storage: a 200G sparse XFS image on the onsite backup volume,
+# The runners' storage: a 400G sparse XFS image on the onsite backup volume,
 # loop-mounted. Its size IS the hard cap -- the runners can fill this
 # filesystem and never the backups around it. The backup volume is mounted
 # noquota, and turning on XFS project quota would mean remounting it; this
 # needs nothing from it. discard punches freed blocks back out of the image,
 # so the image's real footprint tracks what the runners actually hold.
 #
-# To grow it: stop the pool, truncate -s <new> the image, start this unit,
-# xfs_growfs /var/mnt/onsite/gha-runner-cache.
+# To grow it, online, with the pool running (200G to 400G on 2026-11-18, a315):
+#   truncate -s <new> /var/mnt/onsite/gha-runner-cache.img
+#   losetup -c "$(findmnt -no SOURCE /var/mnt/onsite/gha-runner-cache)"
+#   xfs_growfs /var/mnt/onsite/gha-runner-cache
+# losetup -c makes the loop device see the new size; XFS grows while mounted.
+# Then update the size in this file and the README. It cannot shrink.
 [Unit]
-Description=GitHub Actions runner storage (200G loop image on onsite)
+Description=GitHub Actions runner storage (400G loop image on onsite)
 RequiresMountsFor=/var/mnt/onsite
 
 [Mount]

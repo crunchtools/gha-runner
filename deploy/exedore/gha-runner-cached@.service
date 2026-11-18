@@ -9,7 +9,7 @@
 #   instance has its own layer cache, and a job that escapes instance 1 must
 #   not be able to write into the cache instance 2's next job builds from.
 #
-#   Storage lives in a 200G XFS loop image on the onsite backup volume
+#   Storage lives in a 400G XFS loop image on the onsite backup volume
 #   (/var/mnt/onsite/gha-runner-cache, see the .mount unit). The cap is the
 #   filesystem's size, so the runners can fill it and never the backups.
 #
@@ -42,23 +42,49 @@ WorkingDirectory=/var/mnt/onsite/gha-runner-cache/cached%i/home
 # Hide every other service's /srv tree and everything else on the backup
 # volume; keep our config read-only and our own instance directory writable.
 TemporaryFileSystem=/var/srv:ro
-BindReadOnlyPaths=/var/srv/gha-runner/config
+BindReadOnlyPaths=/var/srv/gha-runner/config /var/srv/gha-runner/bin
 TemporaryFileSystem=/var/mnt/onsite:ro
 BindPaths=/var/mnt/onsite/gha-runner-cache/cached%i
 
 Restart=always
 RestartSec=5
+# A day's prune of a 40G store outlasts the 90s default (a315).
+TimeoutStartSec=20min
 
-# --pull=newer on the mint container keeps :main current without podman
-# auto-update, which as root cannot see these rootless users' containers. A
-# registry outage falls back to the local image.
+# Pinned by digest, pulled only when missing: a merged image never reaches the
+# pool on its own. :main with --pull=newer did exactly that, and one bad merge
+# (libssl) crash-looped every runner. A new image arrives only by promotion,
+# README "Promoting a new image"; scripts/deploy-units-test.sh refuses :main.
 ExecStartPre=-/usr/bin/podman rm -f gha-runner-cached%i
+# The layer cache's daily prune (a315), here because this is the one moment no
+# job can be running: the last container is gone and the next is not yet
+# registered, so GitHub hands jobs to the other runners meanwhile.
+# gha-runner-prune.timer touches /run/gha-runner-prune/requested, a root-owned
+# directory this user can only read; the prune runs when that is newer than
+# this runner's own stamp, which is touched first, so a failing prune is tried
+# once per request, not before every job. `-` keeps a failure from holding the
+# runner down. --init puts catatonit at PID 1 so a timeout's SIGTERM reaches
+# the script (bash as PID 1 ignores it); --replace clears a record a SIGKILL
+# left behind, which would otherwise fail every later prune on its name.
+# PRUNE_KEEP spares the runner image itself where a job pulled it.
+ExecStartPre=-/bin/sh -c 'req=/run/gha-runner-prune/requested; \
+  stamp=/var/mnt/onsite/gha-runner-cache/cached%i/home/prune-done; \
+  [ "$$req" -nt "$$stamp" ] || exit 0; touch "$$stamp"; \
+  exec /usr/bin/podman run --rm --replace --init --pull=missing --name gha-runner-cached%i-prune \
+  --network none --device /dev/fuse --security-opt label=disable \
+  -e PRUNE_KEEP=quay.io/crunchtools/gha-runner@sha256:9f8aa398d3d49de17ce4da6b9d102d947c22e5c078596fa84b2cf6a64d591b6b \
+  -v /var/mnt/onsite/gha-runner-cache/cached%i/containers:/home/podman/.local/share/containers \
+  -v /srv/gha-runner/bin/gha-runner-prune:/usr/local/libexec/gha-runner-prune:ro \
+  -v /srv/gha-runner/config/shared-images.list:/run/shared-images.list:ro \
+  --entrypoint /bin/bash \
+  quay.io/crunchtools/gha-runner@sha256:9f8aa398d3d49de17ce4da6b9d102d947c22e5c078596fa84b2cf6a64d591b6b \
+  /usr/local/libexec/gha-runner-prune /run/shared-images.list'
 ExecStartPre=/bin/sh -c 'install -d -m 0700 "$XDG_RUNTIME_DIR/gha-token" && \
-  /usr/bin/podman run --rm --pull=newer --name gha-runner-cached%i-mint \
+  /usr/bin/podman run --rm --pull=missing --name gha-runner-cached%i-mint \
   --env-file /srv/gha-runner/config/gha-runner-cached.env \
   -v /run/srv-secrets/gha-runner-cached%i/gha-app.pem:/run/secrets/gha-app.pem:ro \
   --entrypoint /usr/local/bin/mint-registration-token.sh \
-  quay.io/crunchtools/gha-runner:main \
+  quay.io/crunchtools/gha-runner@sha256:9f8aa398d3d49de17ce4da6b9d102d947c22e5c078596fa84b2cf6a64d591b6b \
   > "$XDG_RUNTIME_DIR/gha-token/regtoken" && \
   chmod 0600 "$XDG_RUNTIME_DIR/gha-token/regtoken"'
 
@@ -78,7 +104,7 @@ ExecStart=/usr/bin/podman run --rm --name gha-runner-cached%i \
   -e GHA_RUNNER_NAME=exedore-cached%i \
   -v /run/gha-runner-cached%i/gha-token:/run/gha:U \
   -v /var/mnt/onsite/gha-runner-cache/cached%i/containers:/home/podman/.local/share/containers \
-  quay.io/crunchtools/gha-runner:main
+  quay.io/crunchtools/gha-runner@sha256:9f8aa398d3d49de17ce4da6b9d102d947c22e5c078596fa84b2cf6a64d591b6b
 # `-`: after an ephemeral job the container has already exited, and a failed
 # stop would mark the unit failed on every job.
 ExecStop=-/usr/bin/podman stop -t 90 gha-runner-cached%i
