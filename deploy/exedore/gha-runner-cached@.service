@@ -75,7 +75,9 @@ ExecStart=/usr/bin/podman run --rm --name gha-runner-cached%i \
   -v /run/gha-runner-cached%i/gha-token:/run/gha:U \
   -v /var/mnt/onsite/gha-runner-cache/cached%i/containers:/home/podman/.local/share/containers \
   quay.io/crunchtools/gha-runner:main
-ExecStop=/usr/bin/podman stop -t 90 gha-runner-cached%i
+# `-`: after an ephemeral job the container has already exited, and a failed
+# stop would mark the unit failed on every job.
+ExecStop=-/usr/bin/podman stop -t 90 gha-runner-cached%i
 ExecStopPost=-/usr/bin/podman rm -f gha-runner-cached%i
 
 [Install]

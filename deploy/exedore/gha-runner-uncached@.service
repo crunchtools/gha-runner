@@ -61,7 +61,9 @@ ExecStart=/usr/bin/podman run --rm --name gha-runner-uncached%i \
   -v /run/gha-runner-uncached%i/gha-token:/run/gha:U \
   -v /var/mnt/onsite/gha-runner-cache/uncached%i/scratch:/home/podman/.local/share/containers \
   quay.io/crunchtools/gha-runner:main
-ExecStop=/usr/bin/podman stop -t 90 gha-runner-uncached%i
+# `-`: after an ephemeral job the container has already exited, and a failed
+# stop would mark the unit failed on every job.
+ExecStop=-/usr/bin/podman stop -t 90 gha-runner-uncached%i
 ExecStopPost=-/usr/bin/podman rm -f gha-runner-uncached%i
 ExecStopPost=-/usr/bin/podman unshare sh -c 'find /var/mnt/onsite/gha-runner-cache/uncached%i/scratch -mindepth 1 -delete'
 
