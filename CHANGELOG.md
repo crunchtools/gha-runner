@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-18
+
 ### Added
 
 - **Tests for `gha-images-warm`** (#34, a298). `scripts/gha-images-warm-test.sh`
