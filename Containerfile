@@ -44,6 +44,11 @@ USER 0
 
 # The runner is .NET: lttng-ust, openssl-libs, krb5-libs, zlib and libicu are
 # upstream's stated Fedora prerequisites, and unlike UBI this base has all five.
+# openssl3-libs too: Fedora 45's openssl-libs is OpenSSL 4 (libssl.so.4), and
+# the runner's .NET probes only for libssl.so.3 and older, so without it
+# Runner.Listener aborts on its first TLS call ("No usable version of libssl
+# was found") -- every Exedore runner crash-looped on that. The smoke test
+# registers against a bogus token to load libssl the way a real start does.
 # git/tar/gzip are actions/checkout's; jq and openssl sign the GitHub App JWT in
 # the entrypoint.
 #
@@ -64,7 +69,7 @@ ARG UPGRADE_STAMP=unset
 RUN : "upgrade ${UPGRADE_STAMP}" \
  && dnf -y upgrade --setopt=install_weak_deps=0 \
  && dnf -y install --setopt=install_weak_deps=0 \
-      lttng-ust openssl-libs krb5-libs zlib libicu \
+      lttng-ust openssl-libs openssl3-libs krb5-libs zlib libicu \
       git tar gzip findutils which procps-ng hostname \
       jq openssl \
       shellcheck python3-pip \

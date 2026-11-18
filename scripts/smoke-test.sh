@@ -24,6 +24,26 @@ run_in_image() {
 echo "== the runner binary is the pinned version"
 run_in_image 'cd actions-runner && ./config.sh --version'
 
+# --version never touches libssl. Registration does, on its first HTTPS call,
+# and that is where a base whose OpenSSL the runner's .NET cannot load aborts
+# ("No usable version of libssl was found", exit 134): podman 6 on Fedora 45
+# shipped only libssl.so.4 and every Exedore runner crash-looped. A bogus token
+# takes registration through a real TLS round trip to GitHub and back with a
+# 404, which is the pass: an HTTP status means the handshake completed.
+echo "== the runner completes a TLS round trip (registration, bogus token)"
+run_in_image 'set -uo pipefail
+cd actions-runner
+out=$(./config.sh --unattended --url https://github.com/crunchtools/gha-runner \
+  --token AAAAAAAAAAAAAAAAAAAAAAAAAAAAA --name smoke-tls 2>&1)
+rc=$?
+if [ "$rc" -ge 128 ] || grep -qi "libssl" <<<"$out"; then
+  printf "%s\n" "$out" >&2; echo "Runner.Listener died loading TLS (exit $rc)" >&2; exit 1
+fi
+grep -q "Http response code: " <<<"$out" \
+  || { printf "%s\n" "$out" >&2; echo "no HTTP response from GitHub" >&2; exit 1; }
+grep "Http response code: " <<<"$out" | head -1 | cut -c1-80
+echo "TLS from Runner.Listener: ok"'
+
 echo "== gh, which Gatehouse's review, triage and retriage call"
 run_in_image 'gh --version | head -1'
 
