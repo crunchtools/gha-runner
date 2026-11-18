@@ -7,3 +7,11 @@ file = "Containerfile"
 evidence = "RUN ln -sfn /home/podman/.runtime/podman/podman.sock /run/docker.sock \\\n && test \"$(readlink -f /var/run)\" = /run"
 status = "not-a-bug"
 reason = "Every job's own steps already run as this uid with full podman and the same API socket (served for Trivy); a job container gets no more. The runner is ephemeral, one job per container, holding no durable credential (constitution: ephemeral registration), as GitHub-hosted runners hand job containers docker.sock."
+
+[[findings]]
+agent = "performance"
+category = "performance"
+file = "deploy/exedore/gha-images-warm"
+evidence = "podman unshare chmod -R a+rX \"$STORE\""
+status = "not-a-bug"
+reason = "An hourly background oneshot off every job's path: the whole warm, chmod included, takes about 30s on a ~4G store, and the store is off on every runner (a276). Narrowing it to metadata and lock files is not worth a second path that can miss one."
