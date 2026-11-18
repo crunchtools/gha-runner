@@ -56,7 +56,13 @@ fuse-overlayfs with the same `force_mask` (image setting, opt-in per runner with
 belong to subuids that map to nothing in another user's namespace, so the
 first copy-up fails.
 
-A runner using the store needs two unit lines, the bind and the mount:
+Measured on 2026-11-18, the store is OFF on every runner. With it on, trentina's
+`sdlc ci` on an uncached runner took 383s and then 375s, against 300s without it. The
+image step went from 184s to about 270s, because builds run on fuse-overlayfs.
+pbs stayed at 48s. Base pulls were never the bottleneck. The warm timer keeps
+running so that turning the store on stays a three-line change.
+
+A runner using the store needs `-e GHA_SHARED_IMAGES=/var/lib/shared-images` and two more unit lines, the bind and the mount:
 `BindReadOnlyPaths=/var/mnt/onsite/gha-runner-cache/shared-images` and
 `-v /var/mnt/onsite/gha-runner-cache/shared-images:/var/lib/shared-images:ro`.
 Rootless podman joins the unit's private mount namespace, which hides the rest
