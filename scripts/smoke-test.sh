@@ -72,17 +72,24 @@ echo "== a job container and a service container, as the runner starts them"
 # ContainerOperationProvider): one network, a service reachable by its alias,
 # and a job container with /var/run/docker.sock mounted, kept alive by tail.
 # Run with the entrypoint's podman API up, since that is what the socket serves.
-# A named network needs podman's rootless network namespace, which Ubuntu's
-# AppArmor (GitHub's runner, where this test runs) refuses to a nested podman;
-# the deployed host has no AppArmor, and podman ignores the option there.
 # unmask=/proc/sys is the deploy units' flag: netavark sets the bridge's sysctls.
+#
+# The named network needs a nested rootless network namespace, which GitHub's
+# Ubuntu VMs refuse (pasta: Permission denied) and the deployed hosts allow
+# (verified on Exedore, a273c). So on a GitHub-hosted runner that half is
+# skipped, loudly; the socket half runs everywhere.
+named_net=1
+if [ "${RUNNER_ENVIRONMENT:-}" = github-hosted ]; then
+  named_net=0
+  echo "::warning title=smoke test::named network and service alias NOT tested: a GitHub-hosted VM cannot run a nested rootless network namespace. This half runs on our own runners."
+fi
 "$ENGINE" run --rm \
   --device /dev/fuse \
   --device /dev/net/tun \
   --security-opt label=disable \
   --security-opt seccomp=unconfined \
-  --security-opt apparmor=unconfined \
   --security-opt unmask=/proc/sys \
+  -e NAMED_NET="$named_net" \
   --entrypoint /bin/bash "$IMAGE" -c '
 set -euo pipefail
 export XDG_RUNTIME_DIR=/home/podman/.runtime
@@ -94,6 +101,13 @@ podman info --format "storage: {{.Store.GraphDriverName}} {{json .Store.GraphOpt
 img=registry.access.redhat.com/ubi10/ubi-minimal:latest
 docker pull -q "$img" >/dev/null
 docker version --format "{{.Server.APIVersion}}" >/dev/null
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+  --entrypoint test "$img" -S /var/run/docker.sock
+echo "job container gets the socket: ok"
+if [ "$NAMED_NET" != 1 ]; then
+  echo "named network and service alias: SKIPPED on a GitHub-hosted runner"
+  exit 0
+fi
 docker network create smoke_net >/dev/null
 docker create --name smoke_svc --network smoke_net --network-alias svc \
   --entrypoint tail "$img" -f /dev/null >/dev/null
@@ -117,7 +131,7 @@ if [ -z "$svc_ip" ] || [ "$got" != "$svc_ip" ]; then
 fi
 docker rm -f smoke_job smoke_svc >/dev/null
 docker network rm smoke_net >/dev/null
-echo "job container and service: ok"'
+echo "job container and service on a named network: ok"'
 
 echo "== GHA_SHARED_IMAGES unset or missing: storage.conf untouched"
 run_in_image 'set -euo pipefail
