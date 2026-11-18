@@ -1,0 +1,69 @@
+# Installed at /etc/systemd/system/gha-runner-uncached@.service on exedore (a264).
+#
+# One UNCACHED runner per instance: gha-runner-uncached@1 .. @2. Every job
+# starts with empty nested container storage, as on gloval -- but here that
+# storage is a DISK directory wiped before and after every job, never a tmpfs.
+# A tmpfs is charged to the cgroup's memory, and 16G of build layers inside an
+# 18G slice is an OOM waiting for a cold build. The directory sits in the same
+# 200G loop filesystem as the cached runners, so it shares that cap.
+#
+# The wipe runs as this user inside its own user namespace (podman unshare):
+# nested builds leave files owned by many subuids, which the user cannot
+# remove from the host side.
+#
+# See gha-runner-cached@.service for the rest of the shape.
+[Unit]
+Description=GitHub Actions runner uncached%i (exedore, empty storage every job)
+Documentation=https://github.com/crunchtools/gha-runner/blob/main/deploy/exedore/README.md
+Requires=srv-secrets@gha-runner-uncached%i.service gha-runner-egress.service
+After=srv-secrets@gha-runner-uncached%i.service gha-runner-egress.service
+RequiresMountsFor=/var/mnt/onsite/gha-runner-cache
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=ghrunner-uncached%i
+Group=ghrunner-uncached%i
+Slice=gha-runner.slice
+RuntimeDirectory=gha-runner-uncached%i
+RuntimeDirectoryMode=0700
+Environment=XDG_RUNTIME_DIR=/run/gha-runner-uncached%i
+Environment=HOME=/var/mnt/onsite/gha-runner-cache/uncached%i/home
+WorkingDirectory=/var/mnt/onsite/gha-runner-cache/uncached%i/home
+
+TemporaryFileSystem=/var/srv:ro
+BindReadOnlyPaths=/var/srv/gha-runner/config
+TemporaryFileSystem=/var/mnt/onsite:ro
+BindPaths=/var/mnt/onsite/gha-runner-cache/uncached%i
+
+Restart=always
+RestartSec=5
+
+ExecStartPre=-/usr/bin/podman rm -f gha-runner-uncached%i
+ExecStartPre=/usr/bin/podman unshare sh -c 'find /var/mnt/onsite/gha-runner-cache/uncached%i/scratch -mindepth 1 -delete'
+ExecStartPre=/bin/sh -c 'install -d -m 0700 "$XDG_RUNTIME_DIR/gha-token" && \
+  /usr/bin/podman run --rm --pull=newer --name gha-runner-uncached%i-mint \
+  --env-file /srv/gha-runner/config/gha-runner-uncached.env \
+  -v /run/srv-secrets/gha-runner-uncached%i/gha-app.pem:/run/secrets/gha-app.pem:ro \
+  --entrypoint /usr/local/bin/mint-registration-token.sh \
+  quay.io/crunchtools/gha-runner:main \
+  > "$XDG_RUNTIME_DIR/gha-token/regtoken" && \
+  chmod 0600 "$XDG_RUNTIME_DIR/gha-token/regtoken"'
+
+ExecStart=/usr/bin/podman run --rm --name gha-runner-uncached%i \
+  --label PODMAN_SYSTEMD_UNIT=gha-runner-uncached@%i.service \
+  --device /dev/fuse \
+  --device /dev/net/tun \
+  --security-opt label=disable \
+  --env-file /srv/gha-runner/config/gha-runner-uncached.env \
+  -e GHA_RUNNER_NAME=exedore-uncached%i \
+  -v /run/gha-runner-uncached%i/gha-token:/run/gha:U \
+  -v /var/mnt/onsite/gha-runner-cache/uncached%i/scratch:/home/podman/.local/share/containers \
+  quay.io/crunchtools/gha-runner:main
+ExecStop=/usr/bin/podman stop -t 90 gha-runner-uncached%i
+ExecStopPost=-/usr/bin/podman rm -f gha-runner-uncached%i
+ExecStopPost=-/usr/bin/podman unshare sh -c 'find /var/mnt/onsite/gha-runner-cache/uncached%i/scratch -mindepth 1 -delete'
+
+[Install]
+WantedBy=multi-user.target

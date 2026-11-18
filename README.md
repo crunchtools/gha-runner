@@ -36,6 +36,11 @@ base cannot work at all here: those images have no shell, and every Actions
 
 ## Two deployments: cached and uncached
 
+The pool now runs on exedore: four cached and two uncached instances in the
+`exedore` runner group. Its units, fence, storage and runbook are in
+[deploy/exedore](deploy/exedore/README.md). Gloval's two units, described
+below, are disabled but kept for rollback.
+
 The same image runs as two units on gloval, named for what they do:
 
 | Unit | User | Label | Container storage | Takes |

@@ -1,0 +1,17 @@
+# Installed at /etc/systemd/system/gha-runner.slice on exedore (a264).
+#
+# One slice for all six runners. The cgroup is
+# /sys/fs/cgroup/gha.slice/gha-runner.slice (the dash is hierarchy), and it
+# exists only while a runner is running.
+[Unit]
+Description=Resource cap for the exedore GitHub Actions runner pool
+Before=slices.target
+
+[Slice]
+# 16 of 24 cores; the seats keep at least 8.
+CPUQuota=1600%
+MemoryHigh=16G
+MemoryMax=18G
+CPUWeight=50
+IOWeight=50
+TasksMax=16384

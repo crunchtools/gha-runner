@@ -1,0 +1,18 @@
+# Installed at /etc/systemd/system/gha-runner-egress.service on exedore (a264).
+# The runners' network fence; see gha-runner-egress.nft.
+# The ruleset lives in /etc/nftables, not /srv: nft runs as iptables_t and
+# SELinux refuses it a file under /srv (var_t). Every runner unit
+# Requires= this, so stopping it stops the pool rather than unfencing it.
+[Unit]
+Description=Egress fence for the exedore GitHub Actions runners (nftables)
+Before=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/nftables/gha-runner-egress.nft
+ExecStop=/usr/sbin/nft delete table inet gha_runner_egress
+
+[Install]
+WantedBy=multi-user.target

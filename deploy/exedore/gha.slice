@@ -1,0 +1,13 @@
+# Installed at /etc/systemd/system/gha.slice on exedore (a264).
+#
+# The weight that actually matters. CPUWeight only competes among SIBLINGS,
+# and gha-runner.slice's sibling set is gha.slice's children -- itself alone.
+# gha.slice is the one that competes with system.slice, where the seats run
+# (at the default 100). Without this file the runners' CPUWeight=50 is a no-op.
+[Unit]
+Description=GitHub Actions runners (parent slice)
+Before=slices.target
+
+[Slice]
+CPUWeight=50
+IOWeight=50

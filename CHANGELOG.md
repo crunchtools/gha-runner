@@ -14,6 +14,16 @@ All notable changes to this project are documented here. The format follows
   and sha256: Fedora's 2.97.0 is built with a vulnerable `golang.org/x/net`.
   The smoke test checks it.
 
+- **The Exedore pool** (`deploy/exedore`, a264). It runs six ephemeral runners
+  in the `exedore` runner group: `gha-runner-cached@1..4` and
+  `gha-runner-uncached@1..2`. Each instance gets its own rootless user, subuid
+  range and OpenBao AppRole. They share one slice (16 CPUs, 18G), whose weight
+  sits on `gha.slice`, where it competes with the seats. Storage is a 200G
+  XFS loop image on the backup volume, capped by its size, and uncached
+  scratch is on disk rather than tmpfs. An nftables owner match keeps runner
+  traffic off the host, the seats and the private networks.
+  `gha-runner-instance` provisions an instance.
+
 ### Fixed
 
 - **Jobs with `container:` or `services:` start.** The runner hardcodes

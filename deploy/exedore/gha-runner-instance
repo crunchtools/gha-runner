@@ -1,0 +1,148 @@
+#!/bin/bash
+# gha-runner-instance -- provision exedore runner instances (a264).
+# Installed at /srv/gha-runner/bin/gha-runner-instance. Run as root.
+#
+#   gha-runner-instance import-key < app.pem
+#       Store the GitHub App private key at kv/exedore/gha-runner/gha-app.pem,
+#       the canonical copy every instance's own path is filled from. Stdin
+#       only: the key never touches argv, a terminal or a log.
+#
+#   gha-runner-instance add cached|uncached N
+#       Idempotent. Creates user ghrunner-<class>N (uid 2100+slot, its own
+#       65536 subuids at 4000000+slot*65536), its directories in the loop
+#       filesystem, its srv-secrets config, an OpenBao policy and AppRole
+#       exedore-gha-runner-<class>N that reads kv/exedore/gha-runner-<class>N/*
+#       only, and copies the canonical key there. Then proves delivery.
+#       slot = N for cached, 10+N for uncached, so N runs 1..9.
+#
+#   gha-runner-instance sync-key cached|uncached N
+#       Re-copy the canonical key to one instance (after a rotation).
+#
+# One AppRole per instance mirrors the seats: each srv-secrets@ instance logs
+# in as exedore-<instance> and can read only its own path. A key rotation is
+# therefore import-key once, then sync-key per instance.
+set -euo pipefail
+
+. /srv/openbao/config/tools.env
+CACHE=/var/mnt/onsite/gha-runner-cache
+CANON=gha-runner/gha-app.pem
+
+die() { echo "gha-runner-instance: $*" >&2; exit 1; }
+[ "$(id -u)" = 0 ] || die "run as root"
+
+TMPS=()
+cleanup() { [ ${#TMPS[@]} -eq 0 ] || rm -f "${TMPS[@]}"; return 0; }
+trap cleanup EXIT
+
+# newtmp -- a 0600 file on tmpfs, removed on exit, path in $REPLY. Never call
+# it (or login) inside $(...): the cleanup list would not survive the subshell.
+newtmp() { REPLY=$(mktemp "$OPENBAO_TMP/.gha.XXXXXX"); TMPS+=("$REPLY"); chmod 0600 "$REPLY"; }
+
+# login <role> -- sets $REPLY to the path of a curl config carrying the token.
+login() {
+  local f
+  newtmp; f=$REPLY
+  jq -n --rawfile r "$OPENBAO_CREDDIR/$1.role_id" --rawfile s "$OPENBAO_CREDDIR/$1.secret_id" \
+       '{role_id:($r|sub("\\s+$";"")), secret_id:($s|sub("\\s+$";""))}' \
+    | curl -sS --fail --cacert "$OPENBAO_CA" --max-time 30 -X PUT --data-binary @- \
+           "$OPENBAO_ADDR/v1/auth/approle/login" \
+    | jq -r '"header = \"X-Vault-Token: " + (.auth.client_token // error("no token")) + "\""' > "$f" \
+    || die "OpenBao login as $1 failed"
+  REPLY=$f
+}
+api() { local cfg=$1; shift; curl -sS --fail --cacert "$OPENBAO_CA" --max-time 30 -K "$cfg" "$@"; }
+
+# kv_copy <cfg> <from> <to> -- one kv entry to another, value never leaves pipes.
+kv_copy() {
+  api "$1" "$OPENBAO_ADDR/v1/$OPENBAO_KVMOUNT/data/$OPENBAO_PREFIX/$2" \
+    | jq -c '{data:{b64:(.data.data.b64 // error("missing"))}}' \
+    | api "$1" -X POST --data-binary @- "$OPENBAO_ADDR/v1/$OPENBAO_KVMOUNT/data/$OPENBAO_PREFIX/$3" >/dev/null
+}
+kv_sha() {
+  api "$1" "$OPENBAO_ADDR/v1/$OPENBAO_KVMOUNT/data/$OPENBAO_PREFIX/$2" \
+    | jq -r '.data.data.b64 // error("missing")' | base64 -d | sha256sum | cut -d' ' -f1
+}
+
+import_key() {
+  local tmp op
+  newtmp; tmp=$REPLY
+  cat > "$tmp"
+  grep -q -- '-----BEGIN .*PRIVATE KEY-----' "$tmp" || die "stdin is not a PEM private key"
+  login exedore-operator; op=$REPLY
+  base64 -w0 < "$tmp" | jq -Rc '{data:{b64:.}}' \
+    | api "$op" -X POST --data-binary @- "$OPENBAO_ADDR/v1/$OPENBAO_KVMOUNT/data/$OPENBAO_PREFIX/$CANON" >/dev/null
+  [ "$(kv_sha "$op" "$CANON")" = "$(sha256sum < "$tmp" | cut -d' ' -f1)" ] || die "read-back mismatch"
+  echo "import-key: stored and read back byte-identical"
+}
+
+instance_vars() { # <class> <n>
+  case $1 in cached) slot=$2 ;; uncached) slot=$((10 + $2)) ;; *) die "class is cached or uncached" ;; esac
+  [[ $2 =~ ^[1-9]$ ]] || die "N is 1..9"
+  inst=$1$2 name=gha-runner-$1$2 user=ghrunner-$1$2
+  uid=$((2100 + slot)) sub=$((4000000 + slot * 65536)) cuid=$((4000000 + slot * 65536 + 999))
+  store=$([ "$1" = cached ] && echo containers || echo scratch)
+}
+
+sync_key() {
+  local op; login exedore-operator; op=$REPLY
+  kv_copy "$op" "$CANON" "$name/gha-app.pem"
+  [ "$(kv_sha "$op" "$CANON")" = "$(kv_sha "$op" "$name/gha-app.pem")" ] || die "$name: key copy mismatch"
+}
+
+add() {
+  mountpoint -q "$CACHE" || die "$CACHE is not mounted"
+
+  getent group "$user" >/dev/null || groupadd -g "$uid" "$user"
+  # SUB_*_COUNT=0: useradd would otherwise hand out the next free range itself,
+  # and secrets.modes below depends on knowing exactly which one this user has.
+  getent passwd "$user" >/dev/null || useradd -u "$uid" -g "$uid" -M -d "$CACHE/$inst/home" \
+    -K SUB_UID_COUNT=0 -K SUB_GID_COUNT=0 \
+    -s /sbin/nologin -c "GitHub Actions runner ($inst, a264)" "$user"
+  grep -qx "$user:$sub:65536" /etc/subuid || usermod --add-subuids "$sub-$((sub + 65535))" "$user"
+  grep -qx "$user:$sub:65536" /etc/subgid || usermod --add-subgids "$sub-$((sub + 65535))" "$user"
+  [ "$(grep -c "^$user:" /etc/subuid)" = 1 ] && [ "$(grep -c "^$user:" /etc/subgid)" = 1 ] \
+    || die "$user has more than one subordinate range; remove the stray one"
+
+  install -d -m 0755 -o root -g root "$CACHE/$inst"
+  install -d -m 0700 -o "$user" -g "$user" "$CACHE/$inst/home"
+  # Owned by the image's uid 1000 as this user's namespace maps it.
+  install -d -m 0700 -o "$cuid" -g "$cuid" "$CACHE/$inst/$store"
+
+  local cfgdir=$SRV_CONFIG_ROOT/$name/config
+  install -d -m 0700 "$SRV_CONFIG_ROOT/$name" "$cfgdir"
+  echo "gha-app.pem 0400 $cuid:$cuid" > "$cfgdir/secrets.modes"
+  echo "0711 root:root" > "$cfgdir/secrets.dirmode"
+
+  local ad role=exedore-$name
+  login exedore-admin; ad=$REPLY
+  jq -n --arg n "$name" --arg p "$OPENBAO_PREFIX" '{policy:(
+      "path \"kv/data/\($p)/\($n)/*\" { capabilities = [\"read\"] }\n" +
+      "path \"kv/metadata/\($p)/\($n)\" { capabilities = [\"list\"] }\n" +
+      "path \"kv/metadata/\($p)/\($n)/*\" { capabilities = [\"read\",\"list\"] }\n")}' \
+    | api "$ad" -X PUT --data-binary @- "$OPENBAO_ADDR/v1/sys/policies/acl/$role" >/dev/null
+  jq -n --arg r "$role" '{token_policies:[$r], token_ttl:300, token_max_ttl:900,
+      secret_id_bound_cidrs:["127.0.0.1/32"], token_bound_cidrs:["127.0.0.1"],
+      secret_id_ttl:0, secret_id_num_uses:0}' \
+    | api "$ad" -X POST --data-binary @- "$OPENBAO_ADDR/v1/auth/approle/role/$role" >/dev/null
+  if [ ! -s "$OPENBAO_CREDDIR/$role.role_id" ] || [ ! -s "$OPENBAO_CREDDIR/$role.secret_id" ]; then
+    (umask 0377
+     api "$ad" "$OPENBAO_ADDR/v1/auth/approle/role/$role/role-id" | jq -r .data.role_id > "$OPENBAO_CREDDIR/$role.role_id"
+     api "$ad" -X POST "$OPENBAO_ADDR/v1/auth/approle/role/$role/secret-id" | jq -r .data.secret_id > "$OPENBAO_CREDDIR/$role.secret_id")
+  fi
+
+  sync_key
+
+  systemctl restart "srv-secrets@$name.service"
+  local f=/run/srv-secrets/$name/gha-app.pem op
+  login exedore-operator; op=$REPLY
+  [ "$(stat -c '%u %a' "$f")" = "$cuid 400" ] || die "$name: delivered with the wrong owner or mode"
+  [ "$(sha256sum < "$f" | cut -d' ' -f1)" = "$(kv_sha "$op" "$CANON")" ] || die "$name: delivered key differs"
+  echo "add: $name ready (user $user uid $uid, subuids $sub+65536, key delivered to uid $cuid)"
+}
+
+case ${1:-} in
+  import-key) import_key ;;
+  add) instance_vars "${2:-}" "${3:-}"; add ;;
+  sync-key) instance_vars "${2:-}" "${3:-}"; sync_key; echo "sync-key: $name matches canonical" ;;
+  *) sed -n '2,25p' "$0" >&2; exit 64 ;;
+esac
