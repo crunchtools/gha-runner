@@ -1,0 +1,2 @@
+# Gourmand configuration; exceptions live in gourmand-exceptions.toml.
+[output]

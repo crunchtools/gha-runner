@@ -6,6 +6,33 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Jobs with `container:` or `services:` start.** The runner hardcodes
+  `-v /var/run/docker.sock:/var/run/docker.sock` for them, and no socket was
+  there, so they failed in "Initialize containers" (crunchtools/gatehouse#153).
+  `/run/docker.sock` now links to the podman API the entrypoint already serves.
+  The smoke test replays the runner's network, service and job-container
+  sequence before the image is published. Both units add
+  `--security-opt unmask=/proc/sys`: without it the nested netavark cannot set
+  its bridge's `route_localnet` on the read-only `/proc/sys`, and no job's
+  named network starts (found on Exedore). Rootless, nothing host-wide becomes
+  writable.
+- `.grype.yaml` ignores the three Critical Go CVEs compiled into Fedora's
+  podman 5.8.9 binary, each pinned to its vulnerable version and expiring
+  2026-12-18; podman 6 fixes them (#26, #28).
+
+### Added
+
+- **A shared, read-only image store, opt-in.** With `GHA_SHARED_IMAGES` set
+  to a store the unit mounts read-only, the entrypoint writes the podman
+  user's `storage.conf` to read it as an additional image store, on
+  fuse-overlayfs with `force_mask = "shared"`, so jobs run its images without
+  pulling. Unset, nothing is written and storage is as before. The smoke test
+  covers both, and that a job cannot write to the store.
+- Constitution 1.4.0 permits that mount and says what the docker.sock link
+  grants.
+
 ## [1.0.1] - 2026-11-11
 
 ### Changed

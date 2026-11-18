@@ -121,6 +121,43 @@ hierarchy, so the cgroup sits under an implicit `gha.slice` rather than at
 systemd realizes it when the first unit in it starts — so checking before the
 service runs reports nothing, which is not the same as reporting a problem.
 
+## A shared, read-only image store
+
+Opt-in, per runner. Mount a warmed store read-only and name it in the env file:
+
+```
+# in the unit's podman run
+-v /srv/gha-shared-images/store:/var/lib/shared-images:ro
+# in gha-runner-*.env
+GHA_SHARED_IMAGES=/var/lib/shared-images
+```
+
+At start, `shared-images.sh` writes the podman user's `storage.conf`: overlay,
+that path under `additionalimagestores`, fuse-overlayfs with
+`force_mask = "shared"`, and nothing else, so graphroot and runroot stay the
+rootless defaults. The base's `/etc/containers/storage.conf` is its rootful
+config, which the rootless runner user never reads. That is what Exedore measured working: the store's
+files are 0700 under an id the runner's user namespace does not map, which
+native overlay can neither read nor copy up from. Jobs then run the store's
+images without pulling and keep their own writable storage. fuse-overlayfs is
+slower for a runner's own builds, so it is enabled per runner class, not by
+default: with `GHA_SHARED_IMAGES` unset, or naming a path that is not there,
+nothing is written and podman's storage is exactly as before.
+
+Read-only is the point: a job can use an image from the store and cannot
+change, add or remove one, so nothing a job does reaches the next job through
+it. `scripts/smoke-test.sh` checks the store, the read-only half, and that
+nothing changes when the variable is unset.
+
+## Job containers and services
+
+A job with `container:` or `services:` makes the runner call `docker create`
+with `-v /var/run/docker.sock:/var/run/docker.sock`, a path it hardcodes. That
+path links to the podman API the entrypoint serves, through the `docker` shim,
+so those jobs start here as they do on GitHub's machines. The socket gives a
+job container what any job's own steps already have here: podman as the runner
+user, in a container that is thrown away after the job.
+
 ## Which jobs reach it
 
 The consuming repository decides, by expression rather than by a setting
