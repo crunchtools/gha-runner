@@ -50,7 +50,9 @@ check() {
 }
 
 units=("$units_dir"/gha-runner-cached@.service "$units_dir"/gha-runner-uncached@.service)
-pinned=$(grep -o 'gha-runner@sha256:[0-9a-f]*' "${units[0]}" | head -1)
+# Empty when the cached unit is not pinned at all: the self-checks below mutate
+# its digest, so they are skipped and the unit check says what is wrong.
+pinned=$(grep -o 'gha-runner@sha256:[0-9a-f]*' "${units[0]}" | head -1 || true)
 pinned=${pinned#gha-runner@}
 
 # refused <case> <sed expression> -- a copy of the cached unit, edited, must fail.
@@ -65,11 +67,15 @@ refused() {
     echo "refused as expected: $case"
   fi
 }
-refused ":main" "s|gha-runner@$pinned|gha-runner:main|"
-refused "--pull=newer" "s|--pull=missing|--pull=newer|"
-refused "a floating tag" "s|gha-runner@$pinned|gha-runner:latest|"
-refused "a short digest" "s|gha-runner@$pinned|gha-runner@sha256:abc|"
-refused "mint and runner disagree" "0,/gha-runner@$pinned/s||gha-runner@sha256:$(printf '0%.0s' {1..64})|"
+if [ -n "$pinned" ]; then
+  refused ":main" "s|gha-runner@$pinned|gha-runner:main|"
+  refused "--pull=newer" "s|--pull=missing|--pull=newer|"
+  refused "a floating tag" "s|gha-runner@$pinned|gha-runner:latest|"
+  refused "a short digest" "s|gha-runner@$pinned|gha-runner@sha256:abc|"
+  refused "mint and runner disagree" "0,/gha-runner@$pinned/s||gha-runner@sha256:$(printf '0%.0s' {1..64})|"
+else
+  echo "self-checks skipped: ${units[0]##*/} pins no digest to mutate" >&2
+fi
 
 case="deploy/exedore units"
 if check "${units[@]}"; then
