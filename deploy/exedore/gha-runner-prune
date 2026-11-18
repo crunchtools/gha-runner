@@ -28,16 +28,31 @@ STORE=${PRUNE_STORE:-$HOME/.local/share/containers}
 
 echo "gha-runner-prune: before $(du -sh "$STORE" 2>/dev/null | cut -f1)"
 
-# The keep set is image IDs, so another tag of a listed image is kept too.
+die() { echo "gha-runner-prune: $*" >&2; exit 1; }
+
+# The keep set is image IDs, so another tag of a listed image is kept too. A
+# listed image that is absent is fine; a store that cannot answer is not, and
+# pruning against an incomplete keep set would throw away what it protects.
 declare -A keep=()
 if [ -s "$LIST" ]; then
   while read -r ref; do
-    id=$(podman image inspect --format '{{.Id}}' "$ref" 2>/dev/null) || continue
-    keep[$id]=1
+    rc=0
+    podman image exists "$ref" || rc=$?
+    case $rc in
+      0) id=$(podman image inspect --format '{{.Id}}' "$ref") \
+           || die "cannot inspect $ref; not pruning with an incomplete keep set"
+         keep[$id]=1 ;;
+      1) ;;
+      *) die "cannot read the store (image exists $ref: exit $rc); not pruning" ;;
+    esac
   done < <(grep -vE '^[[:space:]]*(#|$)' "$LIST")
 else
   echo "gha-runner-prune: warning: $LIST missing or empty, keeping nothing extra" >&2
 fi
+
+# Captured first, so a failed listing stops the run instead of reading as empty.
+rows=$(podman images --no-trunc --filter "until=$AGE" --format '{{.ID}} {{.Repository}}:{{.Tag}}') \
+  || die "cannot list images older than $AGE"
 
 removed=0
 while read -r id ref; do
@@ -54,7 +69,7 @@ while read -r id ref; do
   else
     echo "gha-runner-prune: could not remove $ref" >&2
   fi
-done < <(podman images --no-trunc --filter "until=$AGE" --format '{{.ID}} {{.Repository}}:{{.Tag}}')
+done <<<"$rows"
 
 podman image prune -f --build-cache >/dev/null
 podman system prune -f --build >/dev/null
