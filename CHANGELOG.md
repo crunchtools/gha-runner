@@ -8,6 +8,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Tests for `gha-images-warm`** (#34, a298). `scripts/gha-images-warm-test.sh`
+  puts a stub `podman` first on PATH and runs the warm script against a
+  temporary store, list and HOME: an empty list, pruning a pending ID that is
+  still dangling and keeping one that is not, a failed pull setting the exit
+  status without stopping the rest, and the final `chmod -R a+rX` on disk.
+  `images-warm-test.yml` runs it on every change. The script reads its store
+  and list from `GHA_IMAGES_STORE` and `GHA_IMAGES_LIST` when set; the unit
+  sets neither.
 - **`gh`.** GitHub's hosted image ships it, and Gatehouse's `review`, `triage`
   and `retriage` jobs call it for every API read and write, so they can run
   here (crunchtools/gatehouse, a281). Upstream's 2.103.0, pinned by version

@@ -16,8 +16,10 @@
 # that started on the old version keeps its layers for at least an hour.
 set -euo pipefail
 
-STORE=/var/mnt/onsite/gha-runner-cache/shared-images
-LIST=/srv/gha-runner/config/shared-images.list
+# The two paths can be overridden only so scripts/gha-images-warm-test.sh can
+# run this against a temporary store and list; the unit sets neither.
+STORE=${GHA_IMAGES_STORE:-/var/mnt/onsite/gha-runner-cache/shared-images}
+LIST=${GHA_IMAGES_LIST:-/srv/gha-runner/config/shared-images.list}
 PENDING=$HOME/prune-next-run
 RUNNER=quay.io/crunchtools/gha-runner:main
 
