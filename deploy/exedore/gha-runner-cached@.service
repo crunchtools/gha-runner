@@ -59,13 +59,20 @@ ExecStartPre=-/usr/bin/podman rm -f gha-runner-cached%i
 # The layer cache's daily prune (a315), here because this is the one moment no
 # job can be running: the last container is gone and the next is not yet
 # registered, so GitHub hands jobs to the other runners meanwhile.
-# gha-runner-prune.timer leaves the flag; it is removed before the prune, so a
-# failing prune is tried once a day, not before every job, and `-` keeps a
-# failure from holding the runner down.
-ExecStartPre=-/bin/sh -c 'f=/var/mnt/onsite/gha-runner-cache/cached%i/home/prune-requested; \
-  [ -e "$$f" ] || exit 0; rm -f "$$f"; \
-  exec /usr/bin/podman run --rm --pull=missing --name gha-runner-cached%i-prune \
+# gha-runner-prune.timer touches /run/gha-runner-prune/requested, a root-owned
+# directory this user can only read; the prune runs when that is newer than
+# this runner's own stamp, which is touched first, so a failing prune is tried
+# once per request, not before every job. `-` keeps a failure from holding the
+# runner down. --init puts catatonit at PID 1 so a timeout's SIGTERM reaches
+# the script (bash as PID 1 ignores it); --replace clears a record a SIGKILL
+# left behind, which would otherwise fail every later prune on its name.
+# PRUNE_KEEP spares the runner image itself where a job pulled it.
+ExecStartPre=-/bin/sh -c 'req=/run/gha-runner-prune/requested; \
+  stamp=/var/mnt/onsite/gha-runner-cache/cached%i/home/prune-done; \
+  [ "$$req" -nt "$$stamp" ] || exit 0; touch "$$stamp"; \
+  exec /usr/bin/podman run --rm --replace --init --pull=missing --name gha-runner-cached%i-prune \
   --network none --device /dev/fuse --security-opt label=disable \
+  -e PRUNE_KEEP=quay.io/crunchtools/gha-runner@sha256:9f8aa398d3d49de17ce4da6b9d102d947c22e5c078596fa84b2cf6a64d591b6b \
   -v /var/mnt/onsite/gha-runner-cache/cached%i/containers:/home/podman/.local/share/containers \
   -v /srv/gha-runner/bin/gha-runner-prune:/usr/local/libexec/gha-runner-prune:ro \
   -v /srv/gha-runner/config/shared-images.list:/run/shared-images.list:ro \

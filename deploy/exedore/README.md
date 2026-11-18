@@ -79,14 +79,23 @@ To add an image, add a line to the list and run
 ## Pruning the cached stores (a315)
 
 Unpruned, each cached store grew to 40-45G and filled the filesystem
-(ENOSPC). `gha-runner-prune.timer` fires daily and leaves `prune-requested` in
-each cached runner's home. The runner prunes in its own `ExecStartPre`, between
-two jobs, so nothing is pruned under a running job. It removes tagged images
-created more than 7 days ago (except those `shared-images.list` names), the
-build layer cache, and leftover build containers. An idle runner prunes after
-its next job. Force one now with `systemctl start gha-runner-prune`. Read the
-result in the runner's journal:
+(ENOSPC). `gha-runner-prune.timer` fires daily and touches
+`/run/gha-runner-prune/requested`, a root-owned directory the runners can only
+read. Root never writes in a runner's home. Each cached runner prunes in its
+own `ExecStartPre`, between two jobs, when that file is newer than its
+`home/prune-done`. So nothing is pruned under a running job, and each request
+is tried once. It removes images created more than 7 days ago, tagged or
+pulled by digest, except those `shared-images.list` names and the pinned runner
+image. It also removes the build layer cache and leftover build containers. An
+idle runner prunes after its next job. Force one now with
+`systemctl start gha-runner-prune`. Read the result in the runner's journal:
 `journalctl -u gha-runner-cached@1 -g gha-runner-prune`.
+
+The prune can't rescue a store that is already full: its own container needs
+space to start, and the failure stays in the journal. Recover by hand: stop
+that instance, then remove images as its user with
+`podman unshare` against `cachedN/containers`, or grow the filesystem.
+Alert on `/var/mnt/onsite/gha-runner-cache` usage as the backstop.
 
 ## Scale
 

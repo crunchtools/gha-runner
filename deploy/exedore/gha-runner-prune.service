@@ -1,14 +1,18 @@
 # Installed at /etc/systemd/system/gha-runner-prune.service on exedore (a315).
 # Asks every cached runner to prune its layer cache. It prunes nothing itself:
-# a runner can be mid-job at any moment, so this only leaves prune-requested
-# in each one's home, and gha-runner-cached@.service runs gha-runner-prune
-# between that runner's jobs. Uncached runners need none: their storage is
-# wiped every job. Force one now with `systemctl start gha-runner-prune`.
+# a runner can be mid-job at any moment, so this only touches
+# /run/gha-runner-prune/requested, and each gha-runner-cached@ instance prunes
+# between its own jobs when that file is newer than its stamp. Root writes only
+# in this unit's own root-owned runtime directory, never in a runner's home,
+# where a planted symlink would aim the write. Uncached runners need none:
+# their storage is wiped every job. Force one now with
+# `systemctl start gha-runner-prune`.
 [Unit]
 Description=Ask the cached GitHub Actions runners to prune their image stores
-RequiresMountsFor=/var/mnt/onsite/gha-runner-cache
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'for home in /var/mnt/onsite/gha-runner-cache/cached[0-9]/home; do \
-  [ -d "$$home" ] || continue; touch "$$home/prune-requested" && echo "requested: $$home"; done'
+RuntimeDirectory=gha-runner-prune
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+ExecStart=/usr/bin/touch /run/gha-runner-prune/requested

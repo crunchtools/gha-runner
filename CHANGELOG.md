@@ -21,11 +21,16 @@ All notable changes to this project are documented here. The format follows
   `--pull=missing`, is promoted with the units, and is checked the same way.
 - **The cached runners' stores are pruned daily** (a315). Each grew to 40-45G
   unpruned and filled the runner filesystem (ENOSPC on private-repo jobs).
-  `gha-runner-prune.timer` leaves a flag in each cached runner's home, and the
-  runner's own `ExecStartPre` runs `gha-runner-prune` between two jobs, never
-  under one. That removes tagged images created more than 7 days ago (except
-  those in `shared-images.list`), the build layer cache and leftover build
-  containers. `scripts/gha-runner-prune-test.sh` tests it with a stub podman.
+  `gha-runner-prune.timer` touches `/run/gha-runner-prune/requested`, a
+  root-owned directory the runners can only read. Each cached runner's own
+  `ExecStartPre` runs `gha-runner-prune` between two jobs, never under one,
+  when the request is newer than its stamp. That removes images created more
+  than 7 days ago, tagged or pulled by digest (except those in
+  `shared-images.list` and the pinned runner image), the build layer cache and
+  leftover build containers. The prune container runs with `--init` and
+  `--replace`, so a timed-out prune can't block the next one.
+  `scripts/gha-runner-prune-test.sh` tests it with a stub podman, including
+  the timer-to-runner handoff taken from the unit files.
 - **The runner filesystem is 400G** (a315), grown online from 200G. The mount
   unit's "To grow it" now gives the online steps (`truncate`, `losetup -c`,
   `xfs_growfs`). The pool doesn't need stopping.
