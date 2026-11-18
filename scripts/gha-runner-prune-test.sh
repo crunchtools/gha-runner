@@ -120,15 +120,17 @@ expect "it says why" grep -q "cannot inspect quay.io/crunchtools/sdlc:latest" "$
 expect "nothing is removed or pruned" nothing_pruned
 
 setup "the keep list cannot be read"
-chmod 000 "$t/list"
-if [ -r "$t/list" ]; then
-  echo "skipped [$case]: running as a user who can read mode 000"
-else
-  expect "the script fails" fails run "$t/list"
-  expect "it says why" grep -q "cannot read $t/list" "$t/err"
-  expect "nothing is removed or pruned" nothing_pruned
-fi
-chmod 644 "$t/list"
+# A grep shim fails the read the way an unreadable file does (exit 2), so the
+# case runs the same as root, where mode 000 would still be readable.
+cat > "$t/bin/grep" <<SHIM
+#!/bin/bash
+[ "\${!#}" = "$t/list" ] && { echo "grep: $t/list: Permission denied" >&2; exit 2; }
+exec /usr/bin/grep "\$@"
+SHIM
+chmod +x "$t/bin/grep"
+expect "the script fails" fails run "$t/list"
+expect "it says why" grep -q "cannot read $t/list" "$t/err"
+expect "nothing is removed or pruned" nothing_pruned
 
 setup "a list of comments only"
 printf '# nothing to keep\n\n' > "$t/list"
