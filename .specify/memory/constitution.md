@@ -41,7 +41,7 @@ permitted``. Ruled out by experiment on the host: crun's version (1.30 and
 appstream and does not fix it), every `netns`/`userns`/`cgroupns` combination,
 `--privileged`, `--network host`, `unmask=ALL`, and the subuid layout. UBI 10
 pins podman 5.8.2 and ships no newer build. `quay.io/podman/stable`
-(podman 5.8.9) does it correctly, and it is the upstream project's own
+(podman 6) does it correctly, and it is the upstream project's own
 podman-in-podman image — which is precisely this image's job.
 
 A Hummingbird/RHHI base is wrong here for a different reason: those images
@@ -69,9 +69,13 @@ what carries Fedora's fixes in.
 
 - The runner tarball is verified by `sha256sum -c` against a pinned digest. An
   unverified CI runner binary is a supply-chain hole with a shell attached.
-- The base's `containers.conf`, `storage.conf` and `BUILDAH_ISOLATION=chroot`
+- The base's `containers.conf`, storage config and `BUILDAH_ISOLATION=chroot`
   are NOT re-declared. They are why this base was chosen, and a local copy
-  would drift from it.
+  would drift from it. One exception: a later rootless storage drop-in,
+  `30-gha-runner.conf`, overrides only the keys of the base's
+  `20-image_build.conf` that would put every job on fuse-overlayfs, keeping the
+  runner on native overlay. The build fails if the base stops shipping the file
+  it overrides.
 - Runs as uid 1000 with the base's own subuid ranges, which the nesting needs.
 
 ## Runtime
