@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Documentation
+
+- **The cached store is outside the signature policy's reach** (a367).
+  `deploy/exedore/README.md` records that Red Hat signature verification
+  checks only at pull time. A layer an earlier job tampered with on a cached
+  instance is reused by a later verified `--pull=always` build (measured), so
+  purging Red Hat images between jobs would not close it. The pool is safe
+  because nothing that ships or holds a secret runs on it. Keep it that way.
+
 ## [1.1.2] - 2026-11-18
 
 ### Fixed
