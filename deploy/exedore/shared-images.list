@@ -1,0 +1,14 @@
+# Installed at /srv/gha-runner/config/shared-images.list on exedore (a276).
+# The images gha-images-warm keeps in the shared read-only store, one per
+# line. Taken from the org's workflows and FROM lines on 2026-11-18: the gate
+# images at the tags workflows run, and the Hummingbird Python bases our
+# Containerfiles build from (counts are Containerfiles using each).
+# Only the warm timer writes the store; jobs read it and cannot change it.
+quay.io/crunchtools/sdlc:latest
+quay.io/crunchtools/sdlc:main
+quay.io/crunchtools/gatehouse:latest
+quay.io/crunchtools/gourmand:main
+quay.io/hummingbird/python:3.14-builder
+quay.io/hummingbird/python:3.14
+quay.io/hummingbird/python:3.14-fips-builder
+quay.io/hummingbird/python:3.14-fips

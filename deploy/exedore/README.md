@@ -12,6 +12,7 @@ two-container mint as gloval's; the unit headers say what differs.
 | Fence | `/etc/nftables/gha-runner-egress.nft` |
 | Provisioning | `/srv/gha-runner/bin/gha-runner-instance` |
 | Storage | `/var/mnt/onsite/gha-runner-cache` = 200G XFS loop image `/var/mnt/onsite/gha-runner-cache.img` |
+| Shared image store | `/var/mnt/onsite/gha-runner-cache/shared-images`, owned by `ghimages` (uid 2090), warmed by `gha-images-warm.timer` from `/srv/gha-runner/config/shared-images.list` |
 | App key | OpenBao `kv/exedore/gha-runner/gha-app.pem` (canonical), copied to `kv/exedore/gha-runner-<inst>/`, delivered by `srv-secrets@gha-runner-<inst>` |
 
 One rootless user per instance (`ghrunner-cachedN` uid 2100+N,
@@ -32,11 +33,38 @@ AppRole, so an escape from one instance reaches neither another's cache nor its 
   shows 200G no matter what the backup volume holds. Uncached scratch lives on
   disk in the same filesystem and is wiped before and after every job. It is
   never tmpfs, because tmpfs is charged to the slice's memory.
-- Network: runner users (uids 2100-2199) cannot reach the host (loopback, so
+- Network: runner users (uids 2100-2199) and `ghimages` (2090) cannot reach the host (loopback, so
   OpenBao, and every local address), the seats' bridge 10.88/16, WireGuard,
   or the LAN, multicast and broadcast included. The LAN resolver is the one
   exception, for DNS only. If DHCP changes the resolver, runners lose DNS and
   fail closed; update the two accept lines.
+
+## Shared image store (a276)
+
+`gha-images-warm.timer` runs hourly and 5 minutes after boot. It pulls the
+images in `shared-images.list` into one read-only store inside the 200G
+filesystem. The first warm took 255s and 3.2G; a run with nothing new takes
+about 30s. A version that loses its tag is pruned one run later, so a job
+already using it keeps its layers. Jobs read the store and never write it.
+
+The store is written by a nested podman with fuse-overlayfs and
+`force_mask=shared`. Files on disk stay owned by `ghimages` and readable by
+everyone, and each file's real owner and mode live in the
+`user.containers.override_stat` xattr. A runner reads them back only through
+fuse-overlayfs with the same `force_mask` (image setting, opt-in per runner with
+`GHA_SHARED_IMAGES`). A plain rootless store cannot be shared. Its files
+belong to subuids that map to nothing in another user's namespace, so the
+first copy-up fails.
+
+A runner using the store needs two unit lines, the bind and the mount:
+`BindReadOnlyPaths=/var/mnt/onsite/gha-runner-cache/shared-images` and
+`-v /var/mnt/onsite/gha-runner-cache/shared-images:/var/lib/shared-images:ro`.
+Rootless podman joins the unit's private mount namespace, which hides the rest
+of onsite.
+
+To add an image, add a line to the list and run
+`systemctl start gha-images-warm`. Read the outcome with
+`journalctl -u gha-images-warm -n 20`.
 
 ## Scale
 

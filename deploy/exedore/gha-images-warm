@@ -1,0 +1,53 @@
+#!/bin/bash
+# gha-images-warm -- refresh the runners' shared read-only image store (a276).
+# Installed at /srv/gha-runner/bin/gha-images-warm; run by
+# gha-images-warm.service as ghimages, hourly and at boot.
+#
+# The store is written by a NESTED podman inside the runner image, with
+# fuse-overlayfs and force_mask=shared. That keeps every file on disk owned by
+# ghimages and world-readable, and records the image's true owner and mode in
+# the user.containers.override_stat xattr, which the runners' fuse-overlayfs
+# presents back. A plain rootless pull cannot be shared: its files belong to
+# ghimages' subuids, which map to nothing inside a runner, so a run fails on
+# the first copy-up ("creating /etc/mtab symlink: permission denied").
+# The host has no fuse-overlayfs, so this is also the only place it can run.
+#
+# Untagged versions are removed one run AFTER they lose their tag, so a job
+# that started on the old version keeps its layers for at least an hour.
+set -euo pipefail
+
+STORE=/var/mnt/onsite/gha-runner-cache/shared-images
+LIST=/srv/gha-runner/config/shared-images.list
+PENDING=$HOME/prune-next-run
+RUNNER=quay.io/crunchtools/gha-runner:main
+
+mapfile -t images < <(grep -vE '^[[:space:]]*(#|$)' "$LIST")
+[ ${#images[@]} -gt 0 ] || { echo "gha-images-warm: $LIST lists no images" >&2; exit 1; }
+
+# store <podman args...> -- podman against the store, from inside the runner image.
+store() {
+  podman run --rm --user 0 --pull=newer --device /dev/fuse --security-opt label=disable \
+    -v "$STORE":/var/lib/shared-images --entrypoint podman "$RUNNER" \
+    --root /var/lib/shared-images --runroot /run/store \
+    --storage-opt overlay.mount_program=/usr/bin/fuse-overlayfs \
+    --storage-opt overlay.force_mask=shared "$@"
+}
+
+if [ -s "$PENDING" ]; then
+  still=$(store images -q --no-trunc --filter dangling=true)
+  while read -r id; do
+    grep -qx "$id" <<<"$still" && store rmi "$id" >/dev/null && echo "pruned $id"
+  done < "$PENDING"
+fi
+
+failed=0
+for image in "${images[@]}"; do
+  if store pull -q "$image" >/dev/null; then echo "warm $image"; else echo "FAILED $image" >&2; failed=1; fi
+done
+
+store images -q --no-trunc --filter dangling=true > "$PENDING"
+# Metadata directories are not covered by force_mask; runners must be able to
+# read them, and open the lock files, too.
+podman unshare chmod -R a+rX "$STORE"
+du -sh "$STORE"
+exit "$failed"
