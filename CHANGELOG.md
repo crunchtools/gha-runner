@@ -31,6 +31,12 @@ All notable changes to this project are documented here. The format follows
   `--replace`, so a timed-out prune can't block the next one.
   `scripts/gha-runner-prune-test.sh` tests it with a stub podman, including
   the timer-to-runner handoff taken from the unit files.
+- **skopeo is floored at 1.25.1** (a315). 1.24.1-1 vendors `golang.org/x/net`
+  0.56.0 (GO-2026-6612, Critical). Fedora mirrors still serving it after
+  1.25.1-2 went stable failed `container-scan` at random. A lagging mirror now
+  fails the build with "No match" instead. `sdlc ci` also passes
+  `UPGRADE_STAMP` (`sdlc.toml`), so a cached runner no longer replays an old
+  package layer.
 - **The runner filesystem is 400G** (a315), grown online from 200G. The mount
   unit's "To grow it" now gives the online steps (`truncate`, `losetup -c`,
   `xfs_growfs`). The pool doesn't need stopping.
