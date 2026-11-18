@@ -67,4 +67,38 @@ RUN echo nested-run-works > /proof
 CF
 podman run --rm smoke:run cat /proof'
 
+echo "== a job container and a service container, as the runner starts them"
+# The runner's own sequence for \`container:\` and \`services:\` (actions/runner
+# ContainerOperationProvider): one network, a service reachable by its alias,
+# and a job container with /var/run/docker.sock mounted, kept alive by tail.
+# Run with the entrypoint's podman API up, since that is what the socket serves.
+"$ENGINE" run --rm \
+  --device /dev/fuse \
+  --device /dev/net/tun \
+  --security-opt label=disable \
+  --security-opt seccomp=unconfined \
+  --entrypoint /bin/bash "$IMAGE" -c '
+set -euo pipefail
+export XDG_RUNTIME_DIR=/home/podman/.runtime
+mkdir -p "$XDG_RUNTIME_DIR/podman" && chmod 700 "$XDG_RUNTIME_DIR"
+podman system service --time=0 "unix://$XDG_RUNTIME_DIR/podman/podman.sock" >/dev/null 2>&1 &
+for _ in $(seq 50); do [ -S /var/run/docker.sock ] && break; sleep 0.1; done
+test -S /var/run/docker.sock
+img=registry.access.redhat.com/ubi10/ubi-minimal:latest
+docker pull -q "$img" >/dev/null
+docker version --format "{{.Server.APIVersion}}" >/dev/null
+docker network create smoke_net >/dev/null
+docker create --name smoke_svc --network smoke_net --network-alias svc \
+  --entrypoint tail "$img" -f /dev/null >/dev/null
+docker start smoke_svc >/dev/null
+docker create --name smoke_job --network smoke_net \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /tmp:/__w --workdir /__w \
+  --entrypoint tail "$img" -f /dev/null >/dev/null
+docker start smoke_job >/dev/null
+docker exec smoke_job sh -c "test -S /var/run/docker.sock && getent hosts svc >/dev/null"
+docker rm -f smoke_job smoke_svc >/dev/null
+docker network rm smoke_net >/dev/null
+echo "job container and service: ok"'
+
 echo "== smoke test passed"

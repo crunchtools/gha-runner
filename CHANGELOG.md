@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Jobs with `container:` or `services:` start.** The runner hardcodes
+  `-v /var/run/docker.sock:/var/run/docker.sock` for them, and no socket was
+  there, so they failed in "Initialize containers" (crunchtools/gatehouse#153).
+  `/run/docker.sock` now links to the podman API the entrypoint already serves.
+  The smoke test replays the runner's network, service and job-container
+  sequence before the image is published.
+
 ## [1.0.1] - 2026-11-11
 
 ### Changed

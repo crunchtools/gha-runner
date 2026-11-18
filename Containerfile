@@ -70,6 +70,15 @@ RUN : "upgrade ${UPGRADE_STAMP}" \
 RUN printf '#!/bin/sh\nexec /usr/bin/podman "$@"\n' > /usr/local/bin/docker \
  && chmod 0755 /usr/local/bin/docker
 
+# A job with `container:` or `services:` makes the runner itself call
+# `docker create ... -v /var/run/docker.sock:/var/run/docker.sock`, a path it
+# hardcodes, so without a socket there every such job dies in "Initialize
+# containers" (crunchtools/gatehouse#153). The entrypoint already serves the
+# podman API at $XDG_RUNTIME_DIR/podman/podman.sock; point the docker path at
+# it. It grants nothing a job lacks: podman as this user, as the shim does.
+RUN ln -sfn /home/podman/.runtime/podman/podman.sock /run/docker.sock \
+ && test "$(readlink -f /var/run)" = /run
+
 # uid 1000, with the base's own carefully-laid-out subuid ranges for nesting.
 USER 1000
 WORKDIR /home/podman
