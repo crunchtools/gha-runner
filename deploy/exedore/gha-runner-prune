@@ -35,7 +35,11 @@ die() { echo "gha-runner-prune: $*" >&2; exit 1; }
 # pruning against an incomplete keep set would throw away what it protects.
 declare -A keep=()
 if [ -s "$LIST" ]; then
+  # grep exits 1 when the list holds only comments; 2 is a list it could not read.
+  refs=$(grep -vE '^[[:space:]]*(#|$)' "$LIST") || [ $? -eq 1 ] \
+    || die "cannot read $LIST; not pruning with an incomplete keep set"
   while read -r ref; do
+    [ -n "$ref" ] || continue
     rc=0
     podman image exists "$ref" || rc=$?
     case $rc in
@@ -45,7 +49,7 @@ if [ -s "$LIST" ]; then
       1) ;;
       *) die "cannot read the store (image exists $ref: exit $rc); not pruning" ;;
     esac
-  done < <(grep -vE '^[[:space:]]*(#|$)' "$LIST")
+  done <<<"$refs"
 else
   echo "gha-runner-prune: warning: $LIST missing or empty, keeping nothing extra" >&2
 fi

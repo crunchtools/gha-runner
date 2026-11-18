@@ -24,7 +24,7 @@ setup() {
   case=$1
   t=$(mktemp -d -p "$root")
   mkdir -p "$t/bin" "$t/store"
-  touch "$t/calls" "$t/fail-rmi" "$t/store-broken" "$t/images-broken"
+  touch "$t/calls" "$t/fail-rmi" "$t/store-broken" "$t/images-broken" "$t/inspect-broken"
   cat > "$t/images" <<'ROWS'
 aaa quay.io/crunchtools/sdlc:latest 1
 aaa localhost/sdlc-alias:kept 1
@@ -41,6 +41,7 @@ case "\$1 \${2:-}" in
     [ -s "$t/store-broken" ] && exit 125
     awk -v r="\$3" '\$2 == r { found=1 } END { exit !found }' "$t/images" ;;
   "image inspect")
+    [ -s "$t/inspect-broken" ] && exit 125
     ref=\${*: -1}
     awk -v r="\$ref" '\$2 == r { print \$1; found=1; exit } END { exit !found }' "$t/images" || exit 125 ;;
   "images "*)
@@ -97,6 +98,28 @@ echo 1 > "$t/store-broken"
 expect "the script fails" fails run "$t/list"
 expect "it says why" grep -q "cannot read the store" "$t/err"
 expect "nothing is removed or pruned" nothing_pruned
+
+setup "a listed image exists but cannot be inspected"
+echo 1 > "$t/inspect-broken"
+expect "the script fails" fails run "$t/list"
+expect "it says why" grep -q "cannot inspect quay.io/crunchtools/sdlc:latest" "$t/err"
+expect "nothing is removed or pruned" nothing_pruned
+
+setup "the keep list cannot be read"
+chmod 000 "$t/list"
+if [ -r "$t/list" ]; then
+  echo "skipped [$case]: running as a user who can read mode 000"
+else
+  expect "the script fails" fails run "$t/list"
+  expect "it says why" grep -q "cannot read $t/list" "$t/err"
+  expect "nothing is removed or pruned" nothing_pruned
+fi
+chmod 644 "$t/list"
+
+setup "a list of comments only"
+printf '# nothing to keep\n\n' > "$t/list"
+expect "the script succeeds" run "$t/list"
+expect "the old images go" removed quay.io/crunchtools/sdlc:latest
 
 setup "the image listing fails"
 echo 1 > "$t/images-broken"
