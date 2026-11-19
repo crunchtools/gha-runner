@@ -15,6 +15,12 @@ All notable changes to this project are documented here. The format follows
   purging Red Hat images between jobs would not close it. The pool is safe
   because nothing that ships or holds a secret runs on it. Keep it that way.
 
+### Changed
+- The container release runs constitution v1.51.0's `container-release.yml`
+  (was v1.46.0) and grants it `issues: write`, so a failed scheduled rebuild
+  opens an issue instead of only warning. A `v*` promote now also refuses an
+  image whose `version` label names a different release of this repo.
+
 ## [1.1.2] - 2026-11-18
 
 ### Fixed
