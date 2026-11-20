@@ -96,28 +96,51 @@ grep -q "ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/usr/local/bin/job-completed.sh" \
 echo "image entrypoint: ok"
 
 # a358/a364: Red Hat images must still be signature-checked, not merely pullable.
-# The shipped policy has to accept ubi10-minimal and ubi10/ubi-init (the latter
-# carries signatures in both Rekor logs, 1231502a and ca942090), and the same
-# policy with the wrong signing key or the wrong Rekor key has to reject them --
-# proof each check runs rather than passing open.
+# The shipped policy has to accept both images below, and must reject them when
+# the signing key or the Rekor key is swapped for a throwaway P-256 key, each
+# with the error that proves which check fired (c/image v5.42.1,
+# signature/policy_eval_sigstore.go): a wrong signing key fails to match the
+# key the Rekor SET records, a wrong Rekor key fails the SET's own signature.
+# A non-ECDSA key would be rejected at policy load and prove nothing.
+#
+# ubi-init is pinned by digest on purpose: this digest carries signatures in
+# BOTH Red Hat Rekor logs -- 1231502a... (2026-11-18, key unpublished, #44) and
+# ca942090... (the shipped REKOR-signing-key) -- so it proves a signature from
+# an unknown log beside a good one does not reject the image. The tag moves;
+# this digest does not, and the grep below fails if its signatures change.
 echo "== Red Hat images are verified (release3 sigstore signature + Rekor SET)"
 run_in_image 'set -euo pipefail
-sed "s#/etc/pki/sigstore/SIGSTORE-redhat-release3#/etc/pki/sigstore/REKOR-signing-key#" \
-  /etc/containers/policy.json > /tmp/wrong-key.json
-sed "s#\"rekorPublicKeyPath\": \"/etc/pki/sigstore/REKOR-signing-key\"#\"rekorPublicKeyPath\": \"/etc/pki/sigstore/SIGSTORE-redhat-release3\"#" \
-  /etc/containers/policy.json > /tmp/wrong-rekor.json
-! cmp -s /etc/containers/policy.json /tmp/wrong-rekor.json || { echo "shipped policy has no Rekor key to swap" >&2; exit 1; }
-for img in ubi10/ubi-minimal ubi10/ubi-init; do
-  ref=docker://registry.access.redhat.com/$img:latest
+mixed=registry.access.redhat.com/ubi10/ubi-init@sha256:56b166666bfea9e23148aea63e035690dec4aca88372da83de0012d466aa5183
+sigs=$(skopeo inspect --raw "docker://${mixed%@*}:$(echo "${mixed#*@}" | tr : -).sig")
+for log in 1231502a ca942090; do
+  grep -q "$log" <<<"$sigs" || { echo "$mixed has no signature in Rekor log $log: mixed-log coverage lost" >&2; exit 1; }
+done
+echo "pinned ubi-init carries both Rekor logs: ok"
+openssl ecparam -name prime256v1 -genkey -noout 2>/dev/null | openssl ec -pubout -out /tmp/throwaway.pub 2>/dev/null
+python3 - <<PY
+import json
+for name, field in (("wrong-key", "keyPath"), ("wrong-rekor", "rekorPublicKeyPath")):
+    p = json.load(open("/etc/containers/policy.json"))
+    for r in ("registry.access.redhat.com", "registry.redhat.io"):
+        assert field in p["transports"]["docker"][r][0], field
+        p["transports"]["docker"][r][0][field] = "/tmp/throwaway.pub"
+    json.dump(p, open(f"/tmp/{name}.json", "w"))
+PY
+declare -A want=(
+  [wrong-key]="No public key verified against the RekorSET: publicKey in Rekor SET does not match"
+  [wrong-rekor]="No public key verified against the RekorSET: cryptographic signature verification of Rekor SET failed"
+)
+for ref in docker://registry.access.redhat.com/ubi10/ubi-minimal:latest "docker://$mixed"; do
   rm -rf /tmp/ok
   skopeo copy -q "$ref" dir:/tmp/ok
-  echo "$img: verified pull with the shipped policy: ok"
+  echo "$ref: verified pull with the shipped policy: ok"
   for bad in wrong-key wrong-rekor; do
-    if skopeo --policy /tmp/$bad.json copy -q "$ref" dir:/tmp/bad 2>/tmp/err; then
-      echo "$img: a policy with the $bad accepted the image: verification is not running" >&2; exit 1
+    rm -rf /tmp/bad
+    if skopeo --policy "/tmp/$bad.json" copy -q "$ref" dir:/tmp/bad 2>/tmp/err; then
+      echo "$ref: a policy with the $bad accepted the image: verification is not running" >&2; exit 1
     fi
-    grep -q "Source image rejected" /tmp/err || { cat /tmp/err >&2; exit 1; }
-    echo "$img: $bad rejected: ok"
+    grep -qF "${want[$bad]}" /tmp/err || { echo "$ref: $bad rejected for the wrong reason:" >&2; cat /tmp/err >&2; exit 1; }
+    echo "$ref: $bad rejected by the expected check: ok"
   done
 done'
 

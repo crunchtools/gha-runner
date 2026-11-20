@@ -15,8 +15,9 @@ All notable changes to this project are documented here. The format follows
   2026-11-18 and signs into the shipped key's log again. An image is accepted
   when any one signature verifies, so a stray signature from the new log
   beside an old-log one is ignored. The smoke test now verifies ubi10-minimal
-  and ubi10/ubi-init and proves a wrong Rekor key is rejected. #44 stays open
-  for the new log's key.
+  and ubi10/ubi-init, pinned to a digest signed in both logs. Swapping either
+  the signing key or the Rekor key for a throwaway P-256 key must fail with
+  that check's own error. #44 stays open for the new log's key.
 
 ### Documentation
 
