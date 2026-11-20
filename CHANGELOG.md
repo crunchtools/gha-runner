@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- **Rekor verification is back for Red Hat images** (a364). Both Red Hat
+  entries in `containers/policy.json` again require a Rekor SET checked
+  against `/etc/pki/sigstore/REKOR-signing-key`, closing a358's temporary
+  exception. Red Hat used a new Rekor log (logID `1231502a…`) only on
+  2026-11-18 and signs into the shipped key's log again. An image is accepted
+  when any one signature verifies, so a stray signature from the new log
+  beside an old-log one is ignored. The smoke test now verifies ubi10-minimal
+  and ubi10/ubi-init and proves a wrong Rekor key is rejected. #44 stays open
+  for the new log's key.
+
 ### Documentation
 
 - **The cached store is outside the signature policy's reach** (a367).

@@ -95,21 +95,31 @@ grep -q "ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/usr/local/bin/job-completed.sh" \
   || { echo "image entrypoint is not the installed one" >&2; exit 1; }
 echo "image entrypoint: ok"
 
-# a358: Red Hat images must still be signature-checked, not merely pullable.
-# The shipped policy has to accept ubi10-minimal, and the same policy with the
-# wrong key has to reject it -- proof the check runs rather than passing open.
-echo "== Red Hat images are verified (release3 sigstore signature)"
+# a358/a364: Red Hat images must still be signature-checked, not merely pullable.
+# The shipped policy has to accept ubi10-minimal and ubi10/ubi-init (the latter
+# carries signatures in both Rekor logs, 1231502a and ca942090), and the same
+# policy with the wrong signing key or the wrong Rekor key has to reject them --
+# proof each check runs rather than passing open.
+echo "== Red Hat images are verified (release3 sigstore signature + Rekor SET)"
 run_in_image 'set -euo pipefail
-skopeo copy -q docker://registry.access.redhat.com/ubi10/ubi-minimal:latest dir:/tmp/ok
-echo "verified pull with the shipped policy: ok"
 sed "s#/etc/pki/sigstore/SIGSTORE-redhat-release3#/etc/pki/sigstore/REKOR-signing-key#" \
   /etc/containers/policy.json > /tmp/wrong-key.json
-if skopeo --policy /tmp/wrong-key.json copy -q \
-    docker://registry.access.redhat.com/ubi10/ubi-minimal:latest dir:/tmp/bad 2>/tmp/err; then
-  echo "a policy naming the wrong key accepted the image: verification is not running" >&2; exit 1
-fi
-grep -q "Source image rejected" /tmp/err || { cat /tmp/err >&2; exit 1; }
-echo "wrong key rejected: ok"'
+sed "s#\"rekorPublicKeyPath\": \"/etc/pki/sigstore/REKOR-signing-key\"#\"rekorPublicKeyPath\": \"/etc/pki/sigstore/SIGSTORE-redhat-release3\"#" \
+  /etc/containers/policy.json > /tmp/wrong-rekor.json
+! cmp -s /etc/containers/policy.json /tmp/wrong-rekor.json || { echo "shipped policy has no Rekor key to swap" >&2; exit 1; }
+for img in ubi10/ubi-minimal ubi10/ubi-init; do
+  ref=docker://registry.access.redhat.com/$img:latest
+  rm -rf /tmp/ok
+  skopeo copy -q "$ref" dir:/tmp/ok
+  echo "$img: verified pull with the shipped policy: ok"
+  for bad in wrong-key wrong-rekor; do
+    if skopeo --policy /tmp/$bad.json copy -q "$ref" dir:/tmp/bad 2>/tmp/err; then
+      echo "$img: a policy with the $bad accepted the image: verification is not running" >&2; exit 1
+    fi
+    grep -q "Source image rejected" /tmp/err || { cat /tmp/err >&2; exit 1; }
+    echo "$img: $bad rejected: ok"
+  done
+done'
 
 echo "== nested BUILD"
 run_in_image 'podman build -q -t smoke:build -f - /tmp <<CF
