@@ -51,15 +51,20 @@ ExecStartPre=/bin/sh -c 'install -d -m 0700 "$XDG_RUNTIME_DIR/gha-token" && \
   > "$XDG_RUNTIME_DIR/gha-token/regtoken" && \
   chmod 0600 "$XDG_RUNTIME_DIR/gha-token/regtoken"'
 
-# unmask=/proc/sys lets the nested netavark set its bridge's sysctls, which
-# every `container:` or `services:` job's network needs (a273c). Rootless, the
-# kernel still refuses any sysctl outside this user's own network namespaces.
+# unmask=ALL, not just /proc/sys. /proc/sys lets the nested netavark set its
+# bridge's sysctls, which every `container:` or `services:` job's network needs
+# (a273c). The rest (a472): the kernel refuses a fresh procfs in a child user
+# namespace while any path of ours is masked, crun then bind-mounts THIS /proc
+# into every nested container, and its PIDs stop matching its /proc -- psutil
+# raises NoSuchProcess and mypy 2.4 dies with INTERNAL ERROR. Rootless, the
+# unmasked paths stay owned by the host's root, so this user still cannot read
+# or write them.
 ExecStart=/usr/bin/podman run --rm --name gha-runner-uncached%i \
   --label PODMAN_SYSTEMD_UNIT=gha-runner-uncached@%i.service \
   --device /dev/fuse \
   --device /dev/net/tun \
   --security-opt label=disable \
-  --security-opt unmask=/proc/sys \
+  --security-opt unmask=ALL \
   --env-file /srv/gha-runner/config/gha-runner-uncached.env \
   -e GHA_RUNNER_NAME=exedore-uncached%i \
   -v /run/gha-runner-uncached%i/gha-token:/run/gha:U \
