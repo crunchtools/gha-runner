@@ -133,6 +133,22 @@ RUN printf '%s\n' \
       > /etc/containers/storage.rootless.conf.d/30-gha-runner.conf \
  && test -f /etc/containers/storage.rootless.conf.d/20-image_build.conf
 
+# /proc (a472). The base's other rootless drop-in,
+# /etc/containers/containers.rootless.conf.d/20-image_build.conf, adds the volume
+# /proc:/proc to every container this user starts. A nested container then sees
+# this runner's /proc beside its own PID namespace: its PIDs name other
+# processes or none, psutil raises NoSuchProcess, and mypy 2.4 dies with
+# INTERNAL ERROR (python-sdlc#75). Clearing the volume gives it a fresh procfs,
+# which the kernel allows only while nothing of this container's /proc is
+# masked -- so the units run it with unmask=/proc/*.
+RUN printf '%s\n' \
+      '# gha-runner: nested containers mount their own /proc. Overrides' \
+      '# 20-image_build.conf; needs the runner started with unmask=/proc/*.' \
+      '[containers]' \
+      'volumes = []' \
+      > /etc/containers/containers.rootless.conf.d/30-gha-runner.conf \
+ && grep -q '"/proc:/proc"' /etc/containers/containers.rootless.conf.d/20-image_build.conf
+
 # Signature policy (a358, a364). Red Hat entries require the release3 sigstore
 # signature AND a Rekor SET checked against /etc/pki/sigstore/REKOR-signing-key
 # (logID ca942090...), as containers-common's own policy does. On 2026-11-18

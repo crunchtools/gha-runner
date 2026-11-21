@@ -13,11 +13,14 @@ set -euo pipefail
 IMAGE=${1:?usage: smoke-test.sh <image>}
 ENGINE=${ENGINE:-docker}
 
+# unmask=/proc/* as the deploy units run it: nested containers mount their own
+# procfs (a472), which the kernel refuses behind any masked /proc path.
 run_in_image() {
   "$ENGINE" run --rm \
     --device /dev/fuse \
     --security-opt label=disable \
     --security-opt seccomp=unconfined \
+    --security-opt 'unmask=/proc/*' \
     --entrypoint /bin/bash "$IMAGE" -c "$1"
 }
 
@@ -196,9 +199,9 @@ docker version --format "{{.Server.APIVersion}}" >/dev/null
 docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
   --entrypoint test "$img" -S /var/run/docker.sock
 echo "job container gets the socket: ok"
-# /proc/1 is this container init only when its /proc is its own. Behind any
-# masked path crun bind-mounts the runner /proc instead, and a nested PID then
-# names some other process (a472: mypy INTERNAL ERROR via psutil).
+# /proc/1 is this container init only when its /proc is its own. The base image
+# bind-mounts the runner /proc into nested containers unless our drop-in clears
+# it, and a nested PID then names some other process (a472: mypy via psutil).
 docker run --rm --entrypoint sh "$img" -c \
   "test \"\$(readlink /proc/1/ns/pid)\" = \"\$(readlink /proc/self/ns/pid)\"" \
   || { echo "nested container sees the runner /proc, not its own" >&2; exit 1; }
