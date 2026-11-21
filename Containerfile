@@ -148,10 +148,10 @@ RUN printf '%s\n' \
       '[containers]' \
       'volumes = []' \
       > /etc/containers/containers.rootless.conf.d/30-gha-runner.conf \
- && vols=$(sed -n '/^volumes = \[/,/^\]/{/^volumes/d;/^\]/d;s/[[:space:],]//g;p}' \
-      /etc/containers/containers.rootless.conf.d/20-image_build.conf) \
- && { [ "$vols" = '"/proc:/proc"' ] \
-      || { echo "20-image_build.conf volumes changed: $vols -- volumes = [] would drop them" >&2; exit 1; }; }
+ && python3 -c 'import sys, tomllib; \
+      v = tomllib.load(open(sys.argv[1], "rb")).get("containers", {}).get("volumes"); \
+      v == ["/proc:/proc"] or sys.exit(f"{sys.argv[1]} volumes changed: {v} -- volumes = [] would drop them")' \
+      /etc/containers/containers.rootless.conf.d/20-image_build.conf
 
 # Signature policy (a358, a364). Red Hat entries require the release3 sigstore
 # signature AND a Rekor SET checked against /etc/pki/sigstore/REKOR-signing-key
