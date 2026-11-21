@@ -9,13 +9,15 @@
             "registry.access.redhat.com": [
                 {
                     "type": "sigstoreSigned",
-                    "keyPath": "/etc/pki/sigstore/SIGSTORE-redhat-release3"
+                    "keyPath": "/etc/pki/sigstore/SIGSTORE-redhat-release3",
+                    "rekorPublicKeyPath": "/etc/pki/sigstore/REKOR-signing-key"
                 }
             ],
             "registry.redhat.io": [
                 {
                     "type": "sigstoreSigned",
-                    "keyPath": "/etc/pki/sigstore/SIGSTORE-redhat-release3"
+                    "keyPath": "/etc/pki/sigstore/SIGSTORE-redhat-release3",
+                    "rekorPublicKeyPath": "/etc/pki/sigstore/REKOR-signing-key"
                 }
             ]
         },
