@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-11-21
+
 ### Security
 
 - **Rekor verification is back for Red Hat images** (a364). Both Red Hat
