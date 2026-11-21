@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **The build checks the base's rootless volumes** (a472 review). It fails
+  unless `/proc:/proc` is the only volume in the base's
+  `containers.rootless.conf.d/20-image_build.conf`. Our `volumes = []`
+  override would otherwise drop any volume a newer base adds, without a word.
 - **Nested containers get their own /proc** (a472, python-sdlc#75). The
   base image's rootless drop-in `containers.rootless.conf.d/20-image_build.conf`
   bind-mounts `/proc:/proc` into every container the runner starts. A nested

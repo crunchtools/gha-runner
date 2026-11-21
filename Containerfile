@@ -140,14 +140,18 @@ RUN printf '%s\n' \
 # processes or none, psutil raises NoSuchProcess, and mypy 2.4 dies with
 # INTERNAL ERROR (python-sdlc#75). Clearing the volume gives it a fresh procfs,
 # which the kernel allows only while nothing of this container's /proc is
-# masked -- so the units run it with unmask=/proc/*.
+# masked -- so the units run it with unmask=/proc/*. The build fails if the
+# base ever lists another volume there, which `volumes = []` would drop too.
 RUN printf '%s\n' \
       '# gha-runner: nested containers mount their own /proc. Overrides' \
       '# 20-image_build.conf; needs the runner started with unmask=/proc/*.' \
       '[containers]' \
       'volumes = []' \
       > /etc/containers/containers.rootless.conf.d/30-gha-runner.conf \
- && grep -q '"/proc:/proc"' /etc/containers/containers.rootless.conf.d/20-image_build.conf
+ && vols=$(sed -n '/^volumes = \[/,/^\]/{/^volumes/d;/^\]/d;s/[[:space:],]//g;p}' \
+      /etc/containers/containers.rootless.conf.d/20-image_build.conf) \
+ && { [ "$vols" = '"/proc:/proc"' ] \
+      || { echo "20-image_build.conf volumes changed: $vols -- volumes = [] would drop them" >&2; exit 1; }; }
 
 # Signature policy (a358, a364). Red Hat entries require the release3 sigstore
 # signature AND a Rekor SET checked against /etc/pki/sigstore/REKOR-signing-key
