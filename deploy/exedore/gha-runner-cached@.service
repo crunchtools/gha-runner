@@ -91,20 +91,20 @@ ExecStartPre=/bin/sh -c 'install -d -m 0700 "$XDG_RUNTIME_DIR/gha-token" && \
 # The containers directory is pre-owned by the image's uid 1000 (host subuid
 # start+999) by gha-runner-instance, so it is mounted WITHOUT :U. :U would
 # chown the whole layer cache on every job start.
-# unmask=ALL, not just /proc/sys. /proc/sys lets the nested netavark set its
+# unmask=/proc/*, not just /proc/sys. /proc/sys lets the nested netavark set its
 # bridge's sysctls, which every `container:` or `services:` job's network needs
 # (a273c). The rest (a472): the kernel refuses a fresh procfs in a child user
 # namespace while any path of ours is masked, crun then bind-mounts THIS /proc
 # into every nested container, and its PIDs stop matching its /proc -- psutil
 # raises NoSuchProcess and mypy 2.4 dies with INTERNAL ERROR. Rootless, the
 # unmasked paths stay owned by the host's root, so this user still cannot read
-# or write them.
+# or write them. /sys stays masked: procfs is all the nested mount needs.
 ExecStart=/usr/bin/podman run --rm --name gha-runner-cached%i \
   --label PODMAN_SYSTEMD_UNIT=gha-runner-cached@%i.service \
   --device /dev/fuse \
   --device /dev/net/tun \
   --security-opt label=disable \
-  --security-opt unmask=ALL \
+  --security-opt unmask=/proc/* \
   --env-file /srv/gha-runner/config/gha-runner-cached.env \
   -e GHA_RUNNER_NAME=exedore-cached%i \
   -v /run/gha-runner-cached%i/gha-token:/run/gha:U \

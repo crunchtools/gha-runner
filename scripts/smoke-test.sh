@@ -163,7 +163,7 @@ echo "== a job container and a service container, as the runner starts them"
 # ContainerOperationProvider): one network, a service reachable by its alias,
 # and a job container with /var/run/docker.sock mounted, kept alive by tail.
 # Run with the entrypoint's podman API up, since that is what the socket serves.
-# unmask=ALL is the deploy units' flag: netavark sets the bridge's sysctls, and
+# unmask=/proc/* is the deploy units' flag: netavark sets the bridge's sysctls, and
 # a nested container gets its own procfs rather than ours (a472).
 #
 # The named network needs a nested rootless network namespace, which GitHub's
@@ -180,7 +180,7 @@ fi
   --device /dev/net/tun \
   --security-opt label=disable \
   --security-opt seccomp=unconfined \
-  --security-opt unmask=ALL \
+  --security-opt 'unmask=/proc/*' \
   -e NAMED_NET="$named_net" \
   --entrypoint /bin/bash "$IMAGE" -c '
 set -euo pipefail

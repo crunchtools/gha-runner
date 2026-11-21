@@ -15,8 +15,8 @@ All notable changes to this project are documented here. The format follows
   different process, or none. mypy 2.4's `psutil.Process().cpu_affinity()`
   raised `NoSuchProcess` and `sdlc ci` exited 2 with INTERNAL ERROR (16 of 16
   attempts on exedore-cached1..4). Both units and the smoke test now run the
-  runner with `unmask=ALL`. The smoke test also asserts that a nested
-  container's `/proc/1` shares its PID namespace.
+  runner with `unmask=/proc/*`, and `/sys` stays masked. The smoke test also
+  asserts that a nested container's `/proc/1` shares its PID namespace.
 
 ## [1.1.3] - 2026-11-21
 
