@@ -270,6 +270,7 @@ podman --root /store tag registry.access.redhat.com/ubi10/ubi-micro:latest local
   --device /dev/fuse \
   --security-opt label=disable \
   --security-opt seccomp=unconfined \
+  --security-opt 'unmask=/proc/*' \
   -v "$store":/var/lib/shared-images:ro \
   -e GHA_SHARED_IMAGES=/var/lib/shared-images \
   --entrypoint /bin/bash "$IMAGE" -c '

@@ -23,7 +23,7 @@
 # The base already provides podman, crun, fuse-overlayfs, the nested
 # containers.conf and BUILDAH_ISOLATION=chroot. Do not re-declare those here:
 # they are the reason this base was chosen and a local copy would drift from
-# it. Storage is the one exception, below.
+# it. Two exceptions, below: storage, and the /proc volume (a472).
 #
 # Pinned by digest, not by tag: the runner executes repository code, so "what
 # changed under us" must never be a question.
