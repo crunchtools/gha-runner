@@ -23,7 +23,7 @@
 # The base already provides podman, crun, fuse-overlayfs, the nested
 # containers.conf and BUILDAH_ISOLATION=chroot. Do not re-declare those here:
 # they are the reason this base was chosen and a local copy would drift from
-# it. Storage is the one exception, below.
+# it. Two exceptions, below: storage, and the /proc volume (a472).
 #
 # Pinned by digest, not by tag: the runner executes repository code, so "what
 # changed under us" must never be a question.
@@ -132,6 +132,22 @@ RUN printf '%s\n' \
       'mountopt = "nodev"' \
       > /etc/containers/storage.rootless.conf.d/30-gha-runner.conf \
  && test -f /etc/containers/storage.rootless.conf.d/20-image_build.conf
+
+# /proc (a472). The base's other rootless drop-in,
+# /etc/containers/containers.rootless.conf.d/20-image_build.conf, adds the volume
+# /proc:/proc to every container this user starts. A nested container then sees
+# this runner's /proc beside its own PID namespace: its PIDs name other
+# processes or none, psutil raises NoSuchProcess, and mypy 2.4 dies with
+# INTERNAL ERROR (python-sdlc#75). Clearing the volume gives it a fresh procfs,
+# which the kernel allows only while nothing of this container's /proc is
+# masked -- so the units run it with unmask=/proc/*.
+RUN printf '%s\n' \
+      '# gha-runner: nested containers mount their own /proc. Overrides' \
+      '# 20-image_build.conf; needs the runner started with unmask=/proc/*.' \
+      '[containers]' \
+      'volumes = []' \
+      > /etc/containers/containers.rootless.conf.d/30-gha-runner.conf \
+ && grep -q '"/proc:/proc"' /etc/containers/containers.rootless.conf.d/20-image_build.conf
 
 # Signature policy (a358, a364). Red Hat entries require the release3 sigstore
 # signature AND a Rekor SET checked against /etc/pki/sigstore/REKOR-signing-key

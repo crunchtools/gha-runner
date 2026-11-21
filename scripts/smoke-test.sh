@@ -13,11 +13,14 @@ set -euo pipefail
 IMAGE=${1:?usage: smoke-test.sh <image>}
 ENGINE=${ENGINE:-docker}
 
+# unmask=/proc/* as the deploy units run it: nested containers mount their own
+# procfs (a472), which the kernel refuses behind any masked /proc path.
 run_in_image() {
   "$ENGINE" run --rm \
     --device /dev/fuse \
     --security-opt label=disable \
     --security-opt seccomp=unconfined \
+    --security-opt 'unmask=/proc/*' \
     --entrypoint /bin/bash "$IMAGE" -c "$1"
 }
 
@@ -163,7 +166,8 @@ echo "== a job container and a service container, as the runner starts them"
 # ContainerOperationProvider): one network, a service reachable by its alias,
 # and a job container with /var/run/docker.sock mounted, kept alive by tail.
 # Run with the entrypoint's podman API up, since that is what the socket serves.
-# unmask=/proc/sys is the deploy units' flag: netavark sets the bridge's sysctls.
+# unmask=/proc/* is the deploy units' flag: netavark sets the bridge's sysctls, and
+# a nested container gets its own procfs rather than ours (a472).
 #
 # The named network needs a nested rootless network namespace, which GitHub's
 # Ubuntu VMs refuse (pasta: Permission denied) and the deployed hosts allow
@@ -179,7 +183,7 @@ fi
   --device /dev/net/tun \
   --security-opt label=disable \
   --security-opt seccomp=unconfined \
-  --security-opt unmask=/proc/sys \
+  --security-opt 'unmask=/proc/*' \
   -e NAMED_NET="$named_net" \
   --entrypoint /bin/bash "$IMAGE" -c '
 set -euo pipefail
@@ -195,6 +199,13 @@ docker version --format "{{.Server.APIVersion}}" >/dev/null
 docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
   --entrypoint test "$img" -S /var/run/docker.sock
 echo "job container gets the socket: ok"
+# /proc/1 is this container init only when its /proc is its own. The base image
+# bind-mounts the runner /proc into nested containers unless our drop-in clears
+# it, and a nested PID then names some other process (a472: mypy via psutil).
+docker run --rm --entrypoint sh "$img" -c \
+  "test \"\$(readlink /proc/1/ns/pid)\" = \"\$(readlink /proc/self/ns/pid)\"" \
+  || { echo "nested container sees the runner /proc, not its own" >&2; exit 1; }
+echo "nested container has its own /proc: ok"
 if [ "$NAMED_NET" != 1 ]; then
   echo "named network and service alias: SKIPPED on a GitHub-hosted runner"
   exit 0
@@ -259,6 +270,7 @@ podman --root /store tag registry.access.redhat.com/ubi10/ubi-micro:latest local
   --device /dev/fuse \
   --security-opt label=disable \
   --security-opt seccomp=unconfined \
+  --security-opt 'unmask=/proc/*' \
   -v "$store":/var/lib/shared-images:ro \
   -e GHA_SHARED_IMAGES=/var/lib/shared-images \
   --entrypoint /bin/bash "$IMAGE" -c '

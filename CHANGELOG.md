@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Nested containers get their own /proc** (a472, python-sdlc#75). The
+  base image's rootless drop-in `containers.rootless.conf.d/20-image_build.conf`
+  bind-mounts `/proc:/proc` into every container the runner starts. A nested
+  container saw the runner's PIDs beside its own PID namespace, so mypy 2.4's
+  `psutil.Process().cpu_affinity()` raised `NoSuchProcess` and `sdlc ci`
+  exited 2 with INTERNAL ERROR (16 of 16 attempts on exedore-cached1..4). A
+  `30-gha-runner.conf` drop-in clears that volume. Both units and the smoke
+  test start the runner with `unmask=/proc/*`, because the kernel refuses a
+  fresh procfs behind any masked `/proc` path, and `/sys` stays masked. The
+  smoke test asserts that a nested container's `/proc/1` shares its PID
+  namespace.
+
 ## [1.1.3] - 2026-11-21
 
 ### Security
