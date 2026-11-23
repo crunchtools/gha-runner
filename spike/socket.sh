@@ -27,6 +27,9 @@ if [ -n "$ws" ]; then
   host_ws="$src${GITHUB_WORKSPACE#"$dst"}"
 fi
 sock_host=$(echo "$mounts" | awk -F'|' '$2 == "/var/run/docker.sock" { print $1 }')
+if [ -z "$self" ] && [ -z "$host_ws" ]; then  # a plain step on the runner: no mapping needed
+  host_ws=$GITHUB_WORKSPACE; sock_host=/var/run/docker.sock; echo "host mode: not in a job container"
+fi
 echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE host=$host_ws socket-host=$sock_host"
 [ -n "$host_ws" ] && result workspace-host-path pass "$host_ws" || result workspace-host-path fail "self=$self"
 

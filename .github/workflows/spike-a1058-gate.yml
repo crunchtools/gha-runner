@@ -65,7 +65,7 @@ jobs:
     steps:
       - run: |
           curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" \
-            | tr '{' '\n' | sed -n 's/.*"name":"\(gate_[^"]*\)".*"conclusion":"\([a-z]*\)".*/\1 \2/p; s/.*"conclusion":"\([a-z]*\)".*"name":"\(gate_[^"]*\)".*/\2 \1/p' | sort -u > /tmp/j
+            | tr -d '\n' | sed 's/": */":/g' | tr '{' '\n' | sed -n 's/.*"name":"\(gate_[^"]*\)".*"conclusion":"\([a-z]*\)".*/\1 \2/p; s/.*"conclusion":"\([a-z]*\)".*"name":"\(gate_[^"]*\)".*/\2 \1/p' | sort -u > /tmp/j
           cat /tmp/j; bad=0
           while read -r job concl; do
             case "$job" in gate_ok*) want=success ;; *) want=failure ;; esac

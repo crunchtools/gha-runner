@@ -88,3 +88,50 @@ jobs:
     permissions: { contents: read, checks: read }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: api.sh }
     steps: [{ run: 'eval "$CFETCH" && sh /tmp/s.sh names' }]
+  probe:  # informational: exit 1 = "does not work" (podman remote client on this socket; one 450 KB variable)
+    strategy: { fail-fast: false, matrix: { runner: "${{ fromJSON(format('[\"ubuntu-latest\",\"{0}\"]', vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached')) }}", what: [podman-remote, one-var] } }
+    runs-on: ${{ matrix.runner }}
+    container: *dkr
+    permissions: { contents: read }
+    env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: probe.sh }
+    steps: [{ run: 'eval "$FETCH" && sh /tmp/s.sh ${{ matrix.what }}' }]
+  # Exedore without `container:` (which cannot start there, see a1058): the same scripts as plain steps.
+  socket-host:
+    runs-on: ${{ vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached' }}
+    permissions: { contents: read }
+    env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: socket.sh }
+    steps: [{ run: 'eval "$CFETCH" && sh /tmp/s.sh' }]
+  boot-host:
+    runs-on: ${{ vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached' }}
+    permissions: { contents: read }
+    env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: boot.sh }
+    steps: [{ run: 'eval "$CFETCH" && sh /tmp/s.sh' }]
+  ai-exh:
+    runs-on: ${{ vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached' }}
+    permissions: { contents: read }
+    outputs: { p0: "${{ steps.e.outputs.p0 }}", p1: "${{ steps.e.outputs.p1 }}", p2: "${{ steps.e.outputs.p2 }}", p3: "${{ steps.e.outputs.p3 }}", sha: "${{ steps.e.outputs.sha }}" }
+    env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: chunks.sh }
+    steps: [{ id: e, run: 'eval "$CFETCH" && sh /tmp/s.sh produce' }]
+  write-exh:
+    needs: ai-exh
+    runs-on: ${{ vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached' }}
+    permissions: { contents: read }
+    env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: chunks.sh, SPIKE_SHA: "${{ needs.ai-exh.outputs.sha }}",
+           SDLC_AI_0: "${{ needs.ai-exh.outputs.p0 }}", SDLC_AI_1: "${{ needs.ai-exh.outputs.p1 }}", SDLC_AI_2: "${{ needs.ai-exh.outputs.p2 }}", SDLC_AI_3: "${{ needs.ai-exh.outputs.p3 }}" }
+    steps: [{ run: 'eval "$CFETCH" && sh /tmp/s.sh consume' }]
+  oidc-host:
+    runs-on: ${{ vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached' }}
+    permissions: { contents: read, id-token: write }
+    env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: api.sh }
+    steps: [{ run: 'eval "$CFETCH" && sh /tmp/s.sh oidc' }]
+  keepalive-host:
+    runs-on: ${{ vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached' }}
+    permissions: { contents: read, actions: write }
+    env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: api.sh, SPIKE_WORKFLOW: spike-a1058.yml }
+    steps: [{ run: 'eval "$CFETCH" && sh /tmp/s.sh keepalive' }]
+  probe-host:
+    strategy: { fail-fast: false, matrix: { what: [podman-remote, one-var] } }
+    runs-on: ${{ vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached' }}
+    permissions: { contents: read }
+    env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: probe.sh }
+    steps: [{ run: 'eval "$CFETCH" && sh /tmp/s.sh ${{ matrix.what }}' }]
