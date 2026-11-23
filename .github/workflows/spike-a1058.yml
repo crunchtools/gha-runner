@@ -1,0 +1,90 @@
+# a1058: sdlc#103 runner-mechanics spike. Throwaway; lives on test/a1058-runner-mechanics only.
+# No `uses:` anywhere, as in the design: every job is a `container:` job that fetches its
+# script by API and drives the runner's socket. Each job runs on GitHub's ubuntu-latest and on
+# our uncached Exedore runner.
+name: spike-a1058
+on:
+  push: { branches: [test/a1058-runner-mechanics], paths-ignore: [spike/queue] }
+  workflow_dispatch:
+permissions: {}
+defaults: { run: { shell: sh } }
+env:
+  FETCH: >-
+    wget -q --header "Authorization: Bearer $GITHUB_TOKEN" --header "Accept: application/vnd.github.raw"
+    -O /tmp/s.sh "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/contents/spike/$SCRIPT?ref=$GITHUB_SHA"
+  CFETCH: >-
+    curl -sSf -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github.raw"
+    -o /tmp/s.sh "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/contents/spike/$SCRIPT?ref=$GITHUB_SHA"
+jobs:
+  socket:  # item 4: socket, path mapping, nested isolation, build FROM @digest
+    strategy: { fail-fast: false, matrix: { runner: "${{ fromJSON(format('[\"ubuntu-latest\",\"{0}\"]', vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached')) }}" } }
+    runs-on: ${{ matrix.runner }}
+    container: &dkr { image: "docker.io/library/docker@sha256:cd58b396e427d1ee8cddcc3f3b7e8d8c2ba45755c5dd5b821b6e615e1ccf4586", volumes: ["/var/run/docker.sock:/var/run/docker.sock"] }
+    permissions: { contents: read }
+    env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: socket.sh }
+    steps: [{ run: 'eval "$FETCH" && sh /tmp/s.sh' }]
+  boot:  # item 5 without the channel: sdlc:<major>, baked key, minimum version, exit 2
+    strategy: { fail-fast: false, matrix: { runner: "${{ fromJSON(format('[\"ubuntu-latest\",\"{0}\"]', vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached')) }}" } }
+    runs-on: ${{ matrix.runner }}
+    container: *dkr
+    permissions: { contents: read }
+    env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: boot.sh }
+    steps: [{ run: 'eval "$FETCH" && sh /tmp/s.sh' }]
+  ai-gh:  # item 6: four outputs of 112,500 bytes
+    runs-on: ubuntu-latest
+    container: *dkr
+    permissions: { contents: read }
+    outputs: { p0: "${{ steps.e.outputs.p0 }}", p1: "${{ steps.e.outputs.p1 }}", p2: "${{ steps.e.outputs.p2 }}", p3: "${{ steps.e.outputs.p3 }}", sha: "${{ steps.e.outputs.sha }}" }
+    env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: chunks.sh }
+    steps: [{ id: e, run: 'eval "$FETCH" && sh /tmp/s.sh produce' }]
+  ai-ex:  # item 6: four outputs of 112,500 bytes
+    runs-on: ${{ vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached' }}
+    container: *dkr
+    permissions: { contents: read }
+    outputs: { p0: "${{ steps.e.outputs.p0 }}", p1: "${{ steps.e.outputs.p1 }}", p2: "${{ steps.e.outputs.p2 }}", p3: "${{ steps.e.outputs.p3 }}", sha: "${{ steps.e.outputs.sha }}" }
+    env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: chunks.sh }
+    steps: [{ id: e, run: 'eval "$FETCH" && sh /tmp/s.sh produce' }]
+  write-gh:  # item 6: write reassembles SDLC_AI_0..3
+    needs: ai-gh
+    runs-on: ubuntu-latest
+    container: *dkr
+    permissions: { contents: read }
+    env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: chunks.sh, SPIKE_SHA: "${{ needs.ai-gh.outputs.sha }}",
+           SDLC_AI_0: "${{ needs.ai-gh.outputs.p0 }}", SDLC_AI_1: "${{ needs.ai-gh.outputs.p1 }}", SDLC_AI_2: "${{ needs.ai-gh.outputs.p2 }}", SDLC_AI_3: "${{ needs.ai-gh.outputs.p3 }}" }
+    steps: [{ run: 'eval "$FETCH" && sh /tmp/s.sh consume' }]
+  write-ex:  # item 6: write reassembles SDLC_AI_0..3
+    needs: ai-ex
+    runs-on: ${{ vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached' }}
+    container: *dkr
+    permissions: { contents: read }
+    env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: chunks.sh, SPIKE_SHA: "${{ needs.ai-ex.outputs.sha }}",
+           SDLC_AI_0: "${{ needs.ai-ex.outputs.p0 }}", SDLC_AI_1: "${{ needs.ai-ex.outputs.p1 }}", SDLC_AI_2: "${{ needs.ai-ex.outputs.p2 }}", SDLC_AI_3: "${{ needs.ai-ex.outputs.p3 }}" }
+    steps: [{ run: 'eval "$FETCH" && sh /tmp/s.sh consume' }]
+  keepalive:  # item 8: the weekly PUT .../enable, with GITHUB_TOKEN and actions: write
+    strategy: { fail-fast: false, matrix: { runner: "${{ fromJSON(format('[\"ubuntu-latest\",\"{0}\"]', vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached')) }}" } }
+    runs-on: ${{ matrix.runner }}
+    container: &ubi { image: "registry.access.redhat.com/ubi10/ubi-minimal@sha256:280f36bbb4e9f7ccc8983f29907564222fc539402807c3cc7884bd7a2023358e" }
+    permissions: { contents: read, actions: write }
+    env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: api.sh, SPIKE_WORKFLOW: spike-a1058.yml }
+    steps: [{ run: 'eval "$CFETCH" && sh /tmp/s.sh keepalive' }]
+  oidc:  # item 7/11: an OIDC token from a run: step inside a container job
+    strategy: { fail-fast: false, matrix: { runner: "${{ fromJSON(format('[\"ubuntu-latest\",\"{0}\"]', vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached')) }}" } }
+    runs-on: ${{ matrix.runner }}
+    container: *ubi
+    permissions: { contents: read, id-token: write }
+    env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: api.sh }
+    steps: [{ run: 'eval "$CFETCH" && sh /tmp/s.sh oidc' }]
+  gate:  # item 1: skipped on push; what name does its check carry?
+    name: sdlc / gate (${{ github.event_name }})
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    steps: [{ run: "true" }]
+  names:  # item 1: read the check runs back
+    needs: gate
+    if: always()
+    strategy: { fail-fast: false, matrix: { runner: "${{ fromJSON(format('[\"ubuntu-latest\",\"{0}\"]', vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached')) }}" } }
+    runs-on: ${{ matrix.runner }}
+    container: *ubi
+    permissions: { contents: read, checks: read }
+    env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: api.sh }
+    steps: [{ run: 'eval "$CFETCH" && sh /tmp/s.sh names' }]

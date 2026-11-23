@@ -1,0 +1,13 @@
+# a1058: sdlc#103 item 8, `queue: max`. Three pushes in quick succession: with queue: max all
+# three runs of each runner's job complete, in order; plain concurrency would cancel the middle one.
+name: spike-a1058-queue
+on:
+  push: { branches: [test/a1058-runner-mechanics], paths: [spike/queue] }
+permissions: {}
+defaults: { run: { shell: sh } }
+jobs:
+  promote:
+    strategy: { fail-fast: false, matrix: { runner: "${{ fromJSON(format('[\"ubuntu-latest\",\"{0}\"]', vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached')) }}" } }
+    runs-on: ${{ matrix.runner }}
+    concurrency: { group: "spike-a1058-queue-${{ matrix.runner }}", queue: max }
+    steps: [{ run: 'echo "start $(date -u +%T) sha $GITHUB_SHA run $GITHUB_RUN_NUMBER"; sleep 75; echo "end $(date -u +%T)"' }]

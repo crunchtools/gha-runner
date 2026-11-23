@@ -1,0 +1,75 @@
+# a1058: sdlc#103 item 3, gate fails closed. Intentionally red: three gate_* jobs must fail
+# (not skip) and gate_ok must pass, on both runner kinds. `verdict` reads that back from the API.
+name: spike-a1058-gate
+on:
+  push: { branches: [test/a1058-runner-mechanics], paths-ignore: [spike/queue] }
+permissions: {}
+defaults: { run: { shell: sh } }
+jobs:
+  ai_ok:
+    strategy: { fail-fast: false, matrix: { runner: "${{ fromJSON(format('[\"ubuntu-latest\",\"{0}\"]', vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached')) }}" } }
+    runs-on: ${{ matrix.runner }}
+    steps: [{ run: "true" }]
+  ai_bad:
+    strategy: { fail-fast: false, matrix: { runner: "${{ fromJSON(format('[\"ubuntu-latest\",\"{0}\"]', vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached')) }}" } }
+    runs-on: ${{ matrix.runner }}
+    steps: [{ run: "exit 1" }]
+  ai_skip:
+    if: github.event_name == 'issues'
+    strategy: { fail-fast: false, matrix: { runner: "${{ fromJSON(format('[\"ubuntu-latest\",\"{0}\"]', vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached')) }}" } }
+    runs-on: ${{ matrix.runner }}
+    steps: [{ run: "true" }]
+  write_ok:
+    strategy: { fail-fast: false, matrix: { runner: "${{ fromJSON(format('[\"ubuntu-latest\",\"{0}\"]', vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached')) }}" } }
+    runs-on: ${{ matrix.runner }}
+    steps: [{ run: "true" }]
+  write_bad:
+    strategy: { fail-fast: false, matrix: { runner: "${{ fromJSON(format('[\"ubuntu-latest\",\"{0}\"]', vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached')) }}" } }
+    runs-on: ${{ matrix.runner }}
+    steps: [{ run: "exit 1" }]
+  gate_ok:  # expect success
+    needs: [ai_ok, write_ok]
+    if: always()
+    strategy: { fail-fast: false, matrix: { runner: "${{ fromJSON(format('[\"ubuntu-latest\",\"{0}\"]', vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached')) }}" } }
+    runs-on: ${{ matrix.runner }}
+    env: { SDLC_AI: "${{ needs.ai_ok.result }}", SDLC_WRITE: "${{ needs.write_ok.result }}" }
+    steps: [{ run: 'echo "ai=$SDLC_AI write=$SDLC_WRITE"; test "$SDLC_AI" = success && test "$SDLC_WRITE" = success' }]
+  gate_ai_fail:  # expect failure
+    needs: [ai_bad, write_ok]
+    if: always()
+    strategy: { fail-fast: false, matrix: { runner: "${{ fromJSON(format('[\"ubuntu-latest\",\"{0}\"]', vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached')) }}" } }
+    runs-on: ${{ matrix.runner }}
+    env: { SDLC_AI: "${{ needs.ai_bad.result }}", SDLC_WRITE: "${{ needs.write_ok.result }}" }
+    steps: [{ run: 'echo "ai=$SDLC_AI write=$SDLC_WRITE"; test "$SDLC_AI" = success && test "$SDLC_WRITE" = success' }]
+  gate_write_fail:  # expect failure
+    needs: [ai_ok, write_bad]
+    if: always()
+    strategy: { fail-fast: false, matrix: { runner: "${{ fromJSON(format('[\"ubuntu-latest\",\"{0}\"]', vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached')) }}" } }
+    runs-on: ${{ matrix.runner }}
+    env: { SDLC_AI: "${{ needs.ai_ok.result }}", SDLC_WRITE: "${{ needs.write_bad.result }}" }
+    steps: [{ run: 'echo "ai=$SDLC_AI write=$SDLC_WRITE"; test "$SDLC_AI" = success && test "$SDLC_WRITE" = success' }]
+  gate_ai_skipped:  # expect failure
+    needs: [ai_skip, write_ok]
+    if: always()
+    strategy: { fail-fast: false, matrix: { runner: "${{ fromJSON(format('[\"ubuntu-latest\",\"{0}\"]', vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached')) }}" } }
+    runs-on: ${{ matrix.runner }}
+    env: { SDLC_AI: "${{ needs.ai_skip.result }}", SDLC_WRITE: "${{ needs.write_ok.result }}" }
+    steps: [{ run: 'echo "ai=$SDLC_AI write=$SDLC_WRITE"; test "$SDLC_AI" = success && test "$SDLC_WRITE" = success' }]
+  verdict:
+    needs: [gate_ok, gate_ai_fail, gate_write_fail, gate_ai_skipped]
+    if: always()
+    runs-on: ubuntu-latest
+    container: { image: "registry.access.redhat.com/ubi10/ubi-minimal@sha256:280f36bbb4e9f7ccc8983f29907564222fc539402807c3cc7884bd7a2023358e" }
+    permissions: { actions: read }
+    env: { GITHUB_TOKEN: "${{ github.token }}" }
+    steps:
+      - run: |
+          curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" \
+            | tr '{' '\n' | sed -n 's/.*"name":"\(gate_[^"]*\)".*"conclusion":"\([a-z]*\)".*/\1 \2/p; s/.*"conclusion":"\([a-z]*\)".*"name":"\(gate_[^"]*\)".*/\2 \1/p' | sort -u > /tmp/j
+          cat /tmp/j; bad=0
+          while read -r job concl; do
+            case "$job" in gate_ok*) want=success ;; *) want=failure ;; esac
+            [ "$concl" = "$want" ] && echo "RESULT $job pass ($concl)" || { echo "RESULT $job fail ($concl, want $want)"; bad=1; }
+          done < /tmp/j
+          [ "$(wc -l < /tmp/j)" -eq 8 ] || { echo "RESULT gate-jobs-count fail ($(wc -l < /tmp/j) of 8)"; bad=1; }
+          exit $bad
