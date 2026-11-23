@@ -63,6 +63,13 @@ for kit in 1 0; do
   [ "$kit" = 0 ] && result build-from-digest fail "both builders: $(grep -v '^ *$' "$ctx/b.log" | tail -1)"
 done
 docker rmi -f "spike-a1058-build:$marker" >/dev/null 2>&1
+# The same build with the engine's default network, no --privileged: does building work at all?
+if DOCKER_BUILDKIT=0 docker build -q -t "spike-a1058-build2:$marker" -f "$ctx/Containerfile" "$ctx" >"$ctx/b2.log" 2>&1 \
+   && [ "$(docker run --rm "spike-a1058-build2:$marker" cat /built 2>&1)" = "built-$marker" ]; then
+  result build-from-digest-default-net info "works"
+else
+  result build-from-digest-default-net info "fails: $(grep -v '^ *$' "$ctx/b2.log" | tail -1)"
+fi
 
 # The design's sdlc-boot carries a *podman remote* client: does it speak to this socket?
 if [ -n "$sock_host" ]; then
