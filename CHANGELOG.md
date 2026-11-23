@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.5] - 2026-11-22
+
 ### Fixed
 
 - **`container:` jobs start without a `uses:`** (a1058). The runner always
@@ -18,6 +20,11 @@ All notable changes to this project are documented here. The format follows
   runner's job-started hook (`ACTIONS_RUNNER_HOOK_JOB_STARTED`), which runs
   after that delete and before "Initialize containers". The smoke test
   reproduces the failure with the runner's `-v` flags and asserts the fix.
+
+## [1.1.4] - 2026-11-21
+
+### Fixed
+
 - **The build checks the base's rootless volumes** (a472 review). It fails
   unless `/proc:/proc` is the only volume in the base's
   `containers.rootless.conf.d/20-image_build.conf`. Our `volumes = []`
