@@ -9,10 +9,10 @@ echo "server: $(docker version --format '{{.Server.Version}} {{.Server.Os}}') so
 case "${1:-}" in
 podman-remote)  # the design's sdlc-boot carries a podman remote client
   docker run --rm -v "$sock:/run/s.sock" "$PODMAN" podman --remote --url unix:///run/s.sock version 2>&1 | tail -6
-  docker run --rm -v "$sock:/run/s.sock" "$PODMAN" podman --remote --url unix:///run/s.sock run --rm "$NESTED" echo PODMAN-REMOTE-OK 2>&1 | tail -3 | grep -q PODMAN-REMOTE-OK && echo "PROBE podman-remote ok" ;;
+  docker run --rm -v "$sock:/run/s.sock" "$PODMAN" podman --remote --url unix:///run/s.sock run --rm "$NESTED" echo PODMAN-REMOTE-OK 2>&1 | tail -3 | grep -q PODMAN-REMOTE-OK && echo "PROBE podman-remote ok" || echo "PROBE podman-remote fails" ;;
 one-var)  # can one 450,000-byte variable reach a nested process?
   big=$(head -c 337500 /dev/urandom | base64 -w0)
   printf '%s' "$big" > /tmp/big
   n=$(docker run --rm -e BIG="$(cat /tmp/big)" "$NESTED" sh -c 'echo ${#BIG}' 2>&1 | tail -2); echo "$n"
-  [ "$n" = 450000 ] && echo "PROBE one-var ok (one 450,000-byte variable reached a nested process)" ;;
+  [ "$n" = 450000 ] && echo "PROBE one-var ok (one 450,000-byte variable reached a nested process)" || echo "PROBE one-var refused: $n" ;;
 esac

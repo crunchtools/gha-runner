@@ -23,7 +23,7 @@ jobs:
     permissions: { contents: read }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: socket.sh }
     steps:
-      - { id: e, run: '{ eval "$FETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE)" /tmp/results | sed "s/^/::notice::/"; exit $rc' }
+      - { id: e, run: '{ eval "$FETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE|server:)" /tmp/results | sed "s/^/::notice::/"; [ "$rc" = 0 ] || tail -6 /tmp/results | sed "s/^/::warning::tail rc=$rc: /"; exit $rc' }
       - { name: "RESULT socket-nested-run", if: always(), run: 'grep -qE "^RESULT socket-nested-run (pass|info)" /tmp/results' }
       - { name: "RESULT workspace-host-path", if: always(), run: 'grep -qE "^RESULT workspace-host-path (pass|info)" /tmp/results' }
       - { name: "RESULT workspace-mount", if: always(), run: 'grep -qE "^RESULT workspace-mount (pass|info)" /tmp/results' }
@@ -37,7 +37,7 @@ jobs:
     permissions: { contents: read }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: boot.sh }
     steps:
-      - { id: e, run: '{ eval "$FETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE)" /tmp/results | sed "s/^/::notice::/"; exit $rc' }
+      - { id: e, run: '{ eval "$FETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE|server:)" /tmp/results | sed "s/^/::notice::/"; [ "$rc" = 0 ] || tail -6 /tmp/results | sed "s/^/::warning::tail rc=$rc: /"; exit $rc' }
       - { name: "CASE ok", if: always(), run: 'grep -qE "^CASE ok .* PASS" /tmp/results' }
       - { name: "CASE unsigned", if: always(), run: 'grep -qE "^CASE unsigned .* PASS" /tmp/results' }
       - { name: "CASE wrong-key", if: always(), run: 'grep -qE "^CASE wrong-key .* PASS" /tmp/results' }
@@ -53,7 +53,7 @@ jobs:
     outputs: { p0: "${{ steps.e.outputs.p0 }}", p1: "${{ steps.e.outputs.p1 }}", p2: "${{ steps.e.outputs.p2 }}", p3: "${{ steps.e.outputs.p3 }}", sha: "${{ steps.e.outputs.sha }}" }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: chunks.sh }
     steps:
-      - { id: e, run: '{ eval "$FETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh produce > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE)" /tmp/results | sed "s/^/::notice::/"; exit $rc' }
+      - { id: e, run: '{ eval "$FETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh produce > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE|server:)" /tmp/results | sed "s/^/::notice::/"; [ "$rc" = 0 ] || tail -6 /tmp/results | sed "s/^/::warning::tail rc=$rc: /"; exit $rc' }
       - { name: "RESULT chunk-450000", if: always(), run: 'grep -qE "^RESULT chunk-450000 (pass|info)" /tmp/results' }
       - { name: "RESULT chunk-450001-refused", if: always(), run: 'grep -qE "^RESULT chunk-450001-refused (pass|info)" /tmp/results' }
       - { name: "RESULT chunk-empty-refused", if: always(), run: 'grep -qE "^RESULT chunk-empty-refused (pass|info)" /tmp/results' }
@@ -65,7 +65,7 @@ jobs:
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: chunks.sh, SPIKE_SHA: "${{ needs.ai-gh.outputs.sha }}",
            SDLC_AI_0: "${{ needs.ai-gh.outputs.p0 }}", SDLC_AI_1: "${{ needs.ai-gh.outputs.p1 }}", SDLC_AI_2: "${{ needs.ai-gh.outputs.p2 }}", SDLC_AI_3: "${{ needs.ai-gh.outputs.p3 }}" }
     steps:
-      - { id: e, run: '{ eval "$FETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh consume > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE)" /tmp/results | sed "s/^/::notice::/"; exit $rc' }
+      - { id: e, run: '{ eval "$FETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh consume > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE|server:)" /tmp/results | sed "s/^/::notice::/"; [ "$rc" = 0 ] || tail -6 /tmp/results | sed "s/^/::warning::tail rc=$rc: /"; exit $rc' }
       - { name: "RESULT chunks-reassembled", if: always(), run: 'grep -qE "^RESULT chunks-reassembled (pass|info)" /tmp/results' }
       - { name: "RESULT chunks-nested-env", if: always(), run: 'grep -qE "^RESULT chunks-nested-env (pass|info)" /tmp/results' }
       - { name: "RESULT write-refuses-empty", if: always(), run: 'grep -qE "^RESULT write-refuses-empty (pass|info)" /tmp/results' }
@@ -76,7 +76,7 @@ jobs:
     permissions: { contents: read, actions: write }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: api.sh, SPIKE_WORKFLOW: spike-a1058.yml }
     steps:
-      - { id: e, run: '{ eval "$CFETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh keepalive > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE)" /tmp/results | sed "s/^/::notice::/"; exit $rc' }
+      - { id: e, run: '{ eval "$CFETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh keepalive > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE|server:)" /tmp/results | sed "s/^/::notice::/"; [ "$rc" = 0 ] || tail -6 /tmp/results | sed "s/^/::warning::tail rc=$rc: /"; exit $rc' }
       - { name: "RESULT keepalive-enable", if: always(), run: 'grep -qE "^RESULT keepalive-enable (pass|info)" /tmp/results' }
   oidc:  # item 7/11: an OIDC token from a run: step inside a container job
     strategy: { fail-fast: false, matrix: { runner: [ubuntu-latest] } }
@@ -85,7 +85,7 @@ jobs:
     permissions: { contents: read, id-token: write }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: api.sh }
     steps:
-      - { id: e, run: '{ eval "$CFETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh oidc > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE)" /tmp/results | sed "s/^/::notice::/"; exit $rc' }
+      - { id: e, run: '{ eval "$CFETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh oidc > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE|server:)" /tmp/results | sed "s/^/::notice::/"; [ "$rc" = 0 ] || tail -6 /tmp/results | sed "s/^/::warning::tail rc=$rc: /"; exit $rc' }
       - { name: "RESULT oidc-env", if: always(), run: 'grep -qE "^RESULT oidc-env (pass|info)" /tmp/results' }
       - { name: "RESULT oidc-token", if: always(), run: 'grep -qE "^RESULT oidc-token (pass|info)" /tmp/results' }
   gate:  # item 1: skipped on push; what name does its check carry?
@@ -102,7 +102,7 @@ jobs:
     permissions: { contents: read, checks: read }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: api.sh }
     steps:
-      - { id: e, run: '{ eval "$CFETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh names > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE)" /tmp/results | sed "s/^/::notice::/"; exit $rc' }
+      - { id: e, run: '{ eval "$CFETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh names > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE|server:)" /tmp/results | sed "s/^/::notice::/"; [ "$rc" = 0 ] || tail -6 /tmp/results | sed "s/^/::warning::tail rc=$rc: /"; exit $rc' }
       - { name: "RESULT skipped-name", if: always(), run: 'grep -qE "^RESULT skipped-name (pass|info)" /tmp/results' }
       - { name: "RESULT skipped-not-required", if: always(), run: 'grep -qE "^RESULT skipped-not-required (pass|info)" /tmp/results' }
   probe:  # informational: exit 1 = "does not work" (podman remote client on this socket; one 450 KB variable)
@@ -112,7 +112,7 @@ jobs:
     permissions: { contents: read }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: probe.sh }
     steps:
-      - { id: e, run: '{ eval "$FETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh ${{ matrix.what }} > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE)" /tmp/results | sed "s/^/::notice::/"; exit $rc' }
+      - { id: e, run: '{ eval "$FETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh ${{ matrix.what }} > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE|server:)" /tmp/results | sed "s/^/::notice::/"; [ "$rc" = 0 ] || tail -6 /tmp/results | sed "s/^/::warning::tail rc=$rc: /"; exit $rc' }
       - { name: "PROBE ${{ matrix.what }}", if: always(), run: 'grep -qE "^PROBE ${{ matrix.what }} ok" /tmp/results' }
   # Exedore without `container:` (which cannot start there, see a1058): the same scripts as plain steps.
   socket-host:  # results come back as ::notice:: annotations
@@ -120,13 +120,13 @@ jobs:
     permissions: { contents: read }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: socket.sh }
     steps:
-      - { run: '{ eval "$CFETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE)" /tmp/results | sed "s/^/::notice::/"; exit $rc' }
+      - { run: '{ eval "$CFETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE|server:)" /tmp/results | sed "s/^/::notice::/"; [ "$rc" = 0 ] || tail -6 /tmp/results | sed "s/^/::warning::tail rc=$rc: /"; exit $rc' }
   boot-host:
     runs-on: ${{ vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached' }}
     permissions: { contents: read }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: boot.sh }
     steps:
-      - { id: e, run: '{ eval "$CFETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE)" /tmp/results | sed "s/^/::notice::/"; exit $rc' }
+      - { id: e, run: '{ eval "$CFETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE|server:)" /tmp/results | sed "s/^/::notice::/"; [ "$rc" = 0 ] || tail -6 /tmp/results | sed "s/^/::warning::tail rc=$rc: /"; exit $rc' }
       - { name: "CASE ok", if: always(), run: 'grep -qE "^CASE ok .* PASS" /tmp/results' }
       - { name: "CASE unsigned", if: always(), run: 'grep -qE "^CASE unsigned .* PASS" /tmp/results' }
       - { name: "CASE wrong-key", if: always(), run: 'grep -qE "^CASE wrong-key .* PASS" /tmp/results' }
@@ -141,7 +141,7 @@ jobs:
     outputs: { p0: "${{ steps.e.outputs.p0 }}", p1: "${{ steps.e.outputs.p1 }}", p2: "${{ steps.e.outputs.p2 }}", p3: "${{ steps.e.outputs.p3 }}", sha: "${{ steps.e.outputs.sha }}" }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: chunks.sh }
     steps:
-      - { id: e, run: '{ eval "$CFETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh produce > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE)" /tmp/results | sed "s/^/::notice::/"; exit $rc' }
+      - { id: e, run: '{ eval "$CFETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh produce > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE|server:)" /tmp/results | sed "s/^/::notice::/"; [ "$rc" = 0 ] || tail -6 /tmp/results | sed "s/^/::warning::tail rc=$rc: /"; exit $rc' }
       - { name: "RESULT chunk-450000", if: always(), run: 'grep -qE "^RESULT chunk-450000 (pass|info)" /tmp/results' }
       - { name: "RESULT chunk-450001-refused", if: always(), run: 'grep -qE "^RESULT chunk-450001-refused (pass|info)" /tmp/results' }
       - { name: "RESULT chunk-empty-refused", if: always(), run: 'grep -qE "^RESULT chunk-empty-refused (pass|info)" /tmp/results' }
@@ -152,7 +152,7 @@ jobs:
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: chunks.sh, SPIKE_SHA: "${{ needs.ai-exh.outputs.sha }}",
            SDLC_AI_0: "${{ needs.ai-exh.outputs.p0 }}", SDLC_AI_1: "${{ needs.ai-exh.outputs.p1 }}", SDLC_AI_2: "${{ needs.ai-exh.outputs.p2 }}", SDLC_AI_3: "${{ needs.ai-exh.outputs.p3 }}" }
     steps:
-      - { id: e, run: '{ eval "$CFETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh consume > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE)" /tmp/results | sed "s/^/::notice::/"; exit $rc' }
+      - { id: e, run: '{ eval "$CFETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh consume > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE|server:)" /tmp/results | sed "s/^/::notice::/"; [ "$rc" = 0 ] || tail -6 /tmp/results | sed "s/^/::warning::tail rc=$rc: /"; exit $rc' }
       - { name: "RESULT chunks-reassembled", if: always(), run: 'grep -qE "^RESULT chunks-reassembled (pass|info)" /tmp/results' }
       - { name: "RESULT chunks-nested-env", if: always(), run: 'grep -qE "^RESULT chunks-nested-env (pass|info)" /tmp/results' }
       - { name: "RESULT write-refuses-empty", if: always(), run: 'grep -qE "^RESULT write-refuses-empty (pass|info)" /tmp/results' }
@@ -161,7 +161,7 @@ jobs:
     permissions: { contents: read, id-token: write }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: api.sh }
     steps:
-      - { id: e, run: '{ eval "$CFETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh oidc > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE)" /tmp/results | sed "s/^/::notice::/"; exit $rc' }
+      - { id: e, run: '{ eval "$CFETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh oidc > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE|server:)" /tmp/results | sed "s/^/::notice::/"; [ "$rc" = 0 ] || tail -6 /tmp/results | sed "s/^/::warning::tail rc=$rc: /"; exit $rc' }
       - { name: "RESULT oidc-env", if: always(), run: 'grep -qE "^RESULT oidc-env (pass|info)" /tmp/results' }
       - { name: "RESULT oidc-token", if: always(), run: 'grep -qE "^RESULT oidc-token (pass|info)" /tmp/results' }
   keepalive-host:
@@ -169,7 +169,7 @@ jobs:
     permissions: { contents: read, actions: write }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: api.sh, SPIKE_WORKFLOW: spike-a1058.yml }
     steps:
-      - { id: e, run: '{ eval "$CFETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh keepalive > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE)" /tmp/results | sed "s/^/::notice::/"; exit $rc' }
+      - { id: e, run: '{ eval "$CFETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh keepalive > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE|server:)" /tmp/results | sed "s/^/::notice::/"; [ "$rc" = 0 ] || tail -6 /tmp/results | sed "s/^/::warning::tail rc=$rc: /"; exit $rc' }
       - { name: "RESULT keepalive-enable", if: always(), run: 'grep -qE "^RESULT keepalive-enable (pass|info)" /tmp/results' }
   probe-host:
     strategy: { fail-fast: false, matrix: { what: [podman-remote, one-var] } }
@@ -177,5 +177,5 @@ jobs:
     permissions: { contents: read }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: probe.sh }
     steps:
-      - { id: e, run: '{ eval "$CFETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh ${{ matrix.what }} > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE)" /tmp/results | sed "s/^/::notice::/"; exit $rc' }
+      - { id: e, run: '{ eval "$CFETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh ${{ matrix.what }} > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE|server:)" /tmp/results | sed "s/^/::notice::/"; [ "$rc" = 0 ] || tail -6 /tmp/results | sed "s/^/::warning::tail rc=$rc: /"; exit $rc' }
       - { name: "PROBE ${{ matrix.what }}", if: always(), run: 'grep -qE "^PROBE ${{ matrix.what }} ok" /tmp/results' }
