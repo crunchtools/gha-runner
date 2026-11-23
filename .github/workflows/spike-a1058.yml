@@ -22,28 +22,52 @@ jobs:
     container: &dkr { image: "docker.io/library/docker@sha256:cd58b396e427d1ee8cddcc3f3b7e8d8c2ba45755c5dd5b821b6e615e1ccf4586", volumes: ["/var/run/docker.sock:/var/run/docker.sock"] }
     permissions: { contents: read }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: socket.sh }
-    steps: [{ run: 'eval "$FETCH" && sh /tmp/s.sh' }]
+    steps:
+      - { id: e, run: 'eval "$FETCH" && sh /tmp/s.sh > /tmp/results 2>&1; rc=$?; cat /tmp/results; exit $rc' }
+      - { name: "RESULT socket-nested-run", if: always(), run: 'grep -qE "^RESULT socket-nested-run (pass|info)" /tmp/results' }
+      - { name: "RESULT workspace-host-path", if: always(), run: 'grep -qE "^RESULT workspace-host-path (pass|info)" /tmp/results' }
+      - { name: "RESULT workspace-mount", if: always(), run: 'grep -qE "^RESULT workspace-mount (pass|info)" /tmp/results' }
+      - { name: "RESULT nested-isolation", if: always(), run: 'grep -qE "^RESULT nested-isolation (pass|info)" /tmp/results' }
+      - { name: "RESULT nested-network-none", if: always(), run: 'grep -qE "^RESULT nested-network-none (pass|info)" /tmp/results' }
+      - { name: "RESULT build-from-digest", if: always(), run: 'grep -qE "^RESULT build-from-digest (pass|info)" /tmp/results' }
   boot:  # item 5 without the channel: sdlc:<major>, baked key, minimum version, exit 2
     strategy: { fail-fast: false, matrix: { runner: "${{ fromJSON(format('[\"ubuntu-latest\",\"{0}\"]', vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached')) }}" } }
     runs-on: ${{ matrix.runner }}
     container: *dkr
     permissions: { contents: read }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: boot.sh }
-    steps: [{ run: 'eval "$FETCH" && sh /tmp/s.sh' }]
+    steps:
+      - { id: e, run: 'eval "$FETCH" && sh /tmp/s.sh > /tmp/results 2>&1; rc=$?; cat /tmp/results; exit $rc' }
+      - { name: "CASE ok", if: always(), run: 'grep -qE "^CASE ok .* PASS" /tmp/results' }
+      - { name: "CASE unsigned", if: always(), run: 'grep -qE "^CASE unsigned .* PASS" /tmp/results' }
+      - { name: "CASE wrong-key", if: always(), run: 'grep -qE "^CASE wrong-key .* PASS" /tmp/results' }
+      - { name: "CASE wrong-repo", if: always(), run: 'grep -qE "^CASE wrong-repo .* PASS" /tmp/results' }
+      - { name: "CASE label-mismatch", if: always(), run: 'grep -qE "^CASE label-mismatch .* PASS" /tmp/results' }
+      - { name: "CASE below-min", if: always(), run: 'grep -qE "^CASE below-min .* PASS" /tmp/results' }
+      - { name: "CASE wrong-major", if: always(), run: 'grep -qE "^CASE wrong-major .* PASS" /tmp/results' }
+      - { name: "CASE no-annotation", if: always(), run: 'grep -qE "^CASE no-annotation .* PASS" /tmp/results' }
   ai-gh:  # item 6: four outputs of 112,500 bytes
     runs-on: ubuntu-latest
     container: *dkr
     permissions: { contents: read }
     outputs: { p0: "${{ steps.e.outputs.p0 }}", p1: "${{ steps.e.outputs.p1 }}", p2: "${{ steps.e.outputs.p2 }}", p3: "${{ steps.e.outputs.p3 }}", sha: "${{ steps.e.outputs.sha }}" }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: chunks.sh }
-    steps: [{ id: e, run: 'eval "$FETCH" && sh /tmp/s.sh produce' }]
+    steps:
+      - { id: e, run: 'eval "$FETCH" && sh /tmp/s.sh produce > /tmp/results 2>&1; rc=$?; cat /tmp/results; exit $rc' }
+      - { name: "RESULT chunk-450000", if: always(), run: 'grep -qE "^RESULT chunk-450000 (pass|info)" /tmp/results' }
+      - { name: "RESULT chunk-450001-refused", if: always(), run: 'grep -qE "^RESULT chunk-450001-refused (pass|info)" /tmp/results' }
+      - { name: "RESULT chunk-empty-refused", if: always(), run: 'grep -qE "^RESULT chunk-empty-refused (pass|info)" /tmp/results' }
   ai-ex:  # item 6: four outputs of 112,500 bytes
     runs-on: ${{ vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached' }}
     container: *dkr
     permissions: { contents: read }
     outputs: { p0: "${{ steps.e.outputs.p0 }}", p1: "${{ steps.e.outputs.p1 }}", p2: "${{ steps.e.outputs.p2 }}", p3: "${{ steps.e.outputs.p3 }}", sha: "${{ steps.e.outputs.sha }}" }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: chunks.sh }
-    steps: [{ id: e, run: 'eval "$FETCH" && sh /tmp/s.sh produce' }]
+    steps:
+      - { id: e, run: 'eval "$FETCH" && sh /tmp/s.sh produce > /tmp/results 2>&1; rc=$?; cat /tmp/results; exit $rc' }
+      - { name: "RESULT chunk-450000", if: always(), run: 'grep -qE "^RESULT chunk-450000 (pass|info)" /tmp/results' }
+      - { name: "RESULT chunk-450001-refused", if: always(), run: 'grep -qE "^RESULT chunk-450001-refused (pass|info)" /tmp/results' }
+      - { name: "RESULT chunk-empty-refused", if: always(), run: 'grep -qE "^RESULT chunk-empty-refused (pass|info)" /tmp/results' }
   write-gh:  # item 6: write reassembles SDLC_AI_0..3
     needs: ai-gh
     runs-on: ubuntu-latest
@@ -51,7 +75,11 @@ jobs:
     permissions: { contents: read }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: chunks.sh, SPIKE_SHA: "${{ needs.ai-gh.outputs.sha }}",
            SDLC_AI_0: "${{ needs.ai-gh.outputs.p0 }}", SDLC_AI_1: "${{ needs.ai-gh.outputs.p1 }}", SDLC_AI_2: "${{ needs.ai-gh.outputs.p2 }}", SDLC_AI_3: "${{ needs.ai-gh.outputs.p3 }}" }
-    steps: [{ run: 'eval "$FETCH" && sh /tmp/s.sh consume' }]
+    steps:
+      - { id: e, run: 'eval "$FETCH" && sh /tmp/s.sh consume > /tmp/results 2>&1; rc=$?; cat /tmp/results; exit $rc' }
+      - { name: "RESULT chunks-reassembled", if: always(), run: 'grep -qE "^RESULT chunks-reassembled (pass|info)" /tmp/results' }
+      - { name: "RESULT chunks-nested-env", if: always(), run: 'grep -qE "^RESULT chunks-nested-env (pass|info)" /tmp/results' }
+      - { name: "RESULT write-refuses-empty", if: always(), run: 'grep -qE "^RESULT write-refuses-empty (pass|info)" /tmp/results' }
   write-ex:  # item 6: write reassembles SDLC_AI_0..3
     needs: ai-ex
     runs-on: ${{ vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached' }}
@@ -59,21 +87,30 @@ jobs:
     permissions: { contents: read }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: chunks.sh, SPIKE_SHA: "${{ needs.ai-ex.outputs.sha }}",
            SDLC_AI_0: "${{ needs.ai-ex.outputs.p0 }}", SDLC_AI_1: "${{ needs.ai-ex.outputs.p1 }}", SDLC_AI_2: "${{ needs.ai-ex.outputs.p2 }}", SDLC_AI_3: "${{ needs.ai-ex.outputs.p3 }}" }
-    steps: [{ run: 'eval "$FETCH" && sh /tmp/s.sh consume' }]
+    steps:
+      - { id: e, run: 'eval "$FETCH" && sh /tmp/s.sh consume > /tmp/results 2>&1; rc=$?; cat /tmp/results; exit $rc' }
+      - { name: "RESULT chunks-reassembled", if: always(), run: 'grep -qE "^RESULT chunks-reassembled (pass|info)" /tmp/results' }
+      - { name: "RESULT chunks-nested-env", if: always(), run: 'grep -qE "^RESULT chunks-nested-env (pass|info)" /tmp/results' }
+      - { name: "RESULT write-refuses-empty", if: always(), run: 'grep -qE "^RESULT write-refuses-empty (pass|info)" /tmp/results' }
   keepalive:  # item 8: the weekly PUT .../enable, with GITHUB_TOKEN and actions: write
     strategy: { fail-fast: false, matrix: { runner: "${{ fromJSON(format('[\"ubuntu-latest\",\"{0}\"]', vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached')) }}" } }
     runs-on: ${{ matrix.runner }}
     container: &ubi { image: "registry.access.redhat.com/ubi10/ubi-minimal@sha256:280f36bbb4e9f7ccc8983f29907564222fc539402807c3cc7884bd7a2023358e" }
     permissions: { contents: read, actions: write }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: api.sh, SPIKE_WORKFLOW: spike-a1058.yml }
-    steps: [{ run: 'eval "$CFETCH" && sh /tmp/s.sh keepalive' }]
+    steps:
+      - { id: e, run: 'eval "$CFETCH" && sh /tmp/s.sh keepalive > /tmp/results 2>&1; rc=$?; cat /tmp/results; exit $rc' }
+      - { name: "RESULT keepalive-enable", if: always(), run: 'grep -qE "^RESULT keepalive-enable (pass|info)" /tmp/results' }
   oidc:  # item 7/11: an OIDC token from a run: step inside a container job
     strategy: { fail-fast: false, matrix: { runner: "${{ fromJSON(format('[\"ubuntu-latest\",\"{0}\"]', vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached')) }}" } }
     runs-on: ${{ matrix.runner }}
     container: *ubi
     permissions: { contents: read, id-token: write }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: api.sh }
-    steps: [{ run: 'eval "$CFETCH" && sh /tmp/s.sh oidc' }]
+    steps:
+      - { id: e, run: 'eval "$CFETCH" && sh /tmp/s.sh oidc > /tmp/results 2>&1; rc=$?; cat /tmp/results; exit $rc' }
+      - { name: "RESULT oidc-env", if: always(), run: 'grep -qE "^RESULT oidc-env (pass|info)" /tmp/results' }
+      - { name: "RESULT oidc-token", if: always(), run: 'grep -qE "^RESULT oidc-token (pass|info)" /tmp/results' }
   gate:  # item 1: skipped on push; what name does its check carry?
     name: sdlc / gate (${{ github.event_name }})
     if: github.event_name == 'pull_request_target'
@@ -87,51 +124,87 @@ jobs:
     container: *ubi
     permissions: { contents: read, checks: read }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: api.sh }
-    steps: [{ run: 'eval "$CFETCH" && sh /tmp/s.sh names' }]
+    steps:
+      - { id: e, run: 'eval "$CFETCH" && sh /tmp/s.sh names > /tmp/results 2>&1; rc=$?; cat /tmp/results; exit $rc' }
+      - { name: "RESULT skipped-name", if: always(), run: 'grep -qE "^RESULT skipped-name (pass|info)" /tmp/results' }
+      - { name: "RESULT skipped-not-required", if: always(), run: 'grep -qE "^RESULT skipped-not-required (pass|info)" /tmp/results' }
   probe:  # informational: exit 1 = "does not work" (podman remote client on this socket; one 450 KB variable)
     strategy: { fail-fast: false, matrix: { runner: "${{ fromJSON(format('[\"ubuntu-latest\",\"{0}\"]', vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached')) }}", what: [podman-remote, one-var] } }
     runs-on: ${{ matrix.runner }}
     container: *dkr
     permissions: { contents: read }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: probe.sh }
-    steps: [{ run: 'eval "$FETCH" && sh /tmp/s.sh ${{ matrix.what }}' }]
+    steps:
+      - { id: e, run: 'eval "$FETCH" && sh /tmp/s.sh ${{ matrix.what }} > /tmp/results 2>&1; rc=$?; cat /tmp/results; exit $rc' }
+      - { name: "PROBE ${{ matrix.what }}", if: always(), run: 'grep -qE "^PROBE ${{ matrix.what }} ok" /tmp/results' }
   # Exedore without `container:` (which cannot start there, see a1058): the same scripts as plain steps.
   socket-host:
     runs-on: ${{ vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached' }}
     permissions: { contents: read }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: socket.sh }
-    steps: [{ run: 'eval "$CFETCH" && sh /tmp/s.sh' }]
+    steps:
+      - { id: e, run: 'eval "$CFETCH" && sh /tmp/s.sh > /tmp/results 2>&1; rc=$?; cat /tmp/results; exit $rc' }
+      - { name: "RESULT socket-nested-run", if: always(), run: 'grep -qE "^RESULT socket-nested-run (pass|info)" /tmp/results' }
+      - { name: "RESULT workspace-host-path", if: always(), run: 'grep -qE "^RESULT workspace-host-path (pass|info)" /tmp/results' }
+      - { name: "RESULT workspace-mount", if: always(), run: 'grep -qE "^RESULT workspace-mount (pass|info)" /tmp/results' }
+      - { name: "RESULT nested-isolation", if: always(), run: 'grep -qE "^RESULT nested-isolation (pass|info)" /tmp/results' }
+      - { name: "RESULT nested-network-none", if: always(), run: 'grep -qE "^RESULT nested-network-none (pass|info)" /tmp/results' }
+      - { name: "RESULT build-from-digest", if: always(), run: 'grep -qE "^RESULT build-from-digest (pass|info)" /tmp/results' }
   boot-host:
     runs-on: ${{ vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached' }}
     permissions: { contents: read }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: boot.sh }
-    steps: [{ run: 'eval "$CFETCH" && sh /tmp/s.sh' }]
+    steps:
+      - { id: e, run: 'eval "$CFETCH" && sh /tmp/s.sh > /tmp/results 2>&1; rc=$?; cat /tmp/results; exit $rc' }
+      - { name: "CASE ok", if: always(), run: 'grep -qE "^CASE ok .* PASS" /tmp/results' }
+      - { name: "CASE unsigned", if: always(), run: 'grep -qE "^CASE unsigned .* PASS" /tmp/results' }
+      - { name: "CASE wrong-key", if: always(), run: 'grep -qE "^CASE wrong-key .* PASS" /tmp/results' }
+      - { name: "CASE wrong-repo", if: always(), run: 'grep -qE "^CASE wrong-repo .* PASS" /tmp/results' }
+      - { name: "CASE label-mismatch", if: always(), run: 'grep -qE "^CASE label-mismatch .* PASS" /tmp/results' }
+      - { name: "CASE below-min", if: always(), run: 'grep -qE "^CASE below-min .* PASS" /tmp/results' }
+      - { name: "CASE wrong-major", if: always(), run: 'grep -qE "^CASE wrong-major .* PASS" /tmp/results' }
+      - { name: "CASE no-annotation", if: always(), run: 'grep -qE "^CASE no-annotation .* PASS" /tmp/results' }
   ai-exh:
     runs-on: ${{ vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached' }}
     permissions: { contents: read }
     outputs: { p0: "${{ steps.e.outputs.p0 }}", p1: "${{ steps.e.outputs.p1 }}", p2: "${{ steps.e.outputs.p2 }}", p3: "${{ steps.e.outputs.p3 }}", sha: "${{ steps.e.outputs.sha }}" }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: chunks.sh }
-    steps: [{ id: e, run: 'eval "$CFETCH" && sh /tmp/s.sh produce' }]
+    steps:
+      - { id: e, run: 'eval "$CFETCH" && sh /tmp/s.sh produce > /tmp/results 2>&1; rc=$?; cat /tmp/results; exit $rc' }
+      - { name: "RESULT chunk-450000", if: always(), run: 'grep -qE "^RESULT chunk-450000 (pass|info)" /tmp/results' }
+      - { name: "RESULT chunk-450001-refused", if: always(), run: 'grep -qE "^RESULT chunk-450001-refused (pass|info)" /tmp/results' }
+      - { name: "RESULT chunk-empty-refused", if: always(), run: 'grep -qE "^RESULT chunk-empty-refused (pass|info)" /tmp/results' }
   write-exh:
     needs: ai-exh
     runs-on: ${{ vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached' }}
     permissions: { contents: read }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: chunks.sh, SPIKE_SHA: "${{ needs.ai-exh.outputs.sha }}",
            SDLC_AI_0: "${{ needs.ai-exh.outputs.p0 }}", SDLC_AI_1: "${{ needs.ai-exh.outputs.p1 }}", SDLC_AI_2: "${{ needs.ai-exh.outputs.p2 }}", SDLC_AI_3: "${{ needs.ai-exh.outputs.p3 }}" }
-    steps: [{ run: 'eval "$CFETCH" && sh /tmp/s.sh consume' }]
+    steps:
+      - { id: e, run: 'eval "$CFETCH" && sh /tmp/s.sh consume > /tmp/results 2>&1; rc=$?; cat /tmp/results; exit $rc' }
+      - { name: "RESULT chunks-reassembled", if: always(), run: 'grep -qE "^RESULT chunks-reassembled (pass|info)" /tmp/results' }
+      - { name: "RESULT chunks-nested-env", if: always(), run: 'grep -qE "^RESULT chunks-nested-env (pass|info)" /tmp/results' }
+      - { name: "RESULT write-refuses-empty", if: always(), run: 'grep -qE "^RESULT write-refuses-empty (pass|info)" /tmp/results' }
   oidc-host:
     runs-on: ${{ vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached' }}
     permissions: { contents: read, id-token: write }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: api.sh }
-    steps: [{ run: 'eval "$CFETCH" && sh /tmp/s.sh oidc' }]
+    steps:
+      - { id: e, run: 'eval "$CFETCH" && sh /tmp/s.sh oidc > /tmp/results 2>&1; rc=$?; cat /tmp/results; exit $rc' }
+      - { name: "RESULT oidc-env", if: always(), run: 'grep -qE "^RESULT oidc-env (pass|info)" /tmp/results' }
+      - { name: "RESULT oidc-token", if: always(), run: 'grep -qE "^RESULT oidc-token (pass|info)" /tmp/results' }
   keepalive-host:
     runs-on: ${{ vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached' }}
     permissions: { contents: read, actions: write }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: api.sh, SPIKE_WORKFLOW: spike-a1058.yml }
-    steps: [{ run: 'eval "$CFETCH" && sh /tmp/s.sh keepalive' }]
+    steps:
+      - { id: e, run: 'eval "$CFETCH" && sh /tmp/s.sh keepalive > /tmp/results 2>&1; rc=$?; cat /tmp/results; exit $rc' }
+      - { name: "RESULT keepalive-enable", if: always(), run: 'grep -qE "^RESULT keepalive-enable (pass|info)" /tmp/results' }
   probe-host:
     strategy: { fail-fast: false, matrix: { what: [podman-remote, one-var] } }
     runs-on: ${{ vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached' }}
     permissions: { contents: read }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: probe.sh }
-    steps: [{ run: 'eval "$CFETCH" && sh /tmp/s.sh ${{ matrix.what }}' }]
+    steps:
+      - { id: e, run: 'eval "$CFETCH" && sh /tmp/s.sh ${{ matrix.what }} > /tmp/results 2>&1; rc=$?; cat /tmp/results; exit $rc' }
+      - { name: "PROBE ${{ matrix.what }}", if: always(), run: 'grep -qE "^PROBE ${{ matrix.what }} ok" /tmp/results' }
