@@ -62,6 +62,9 @@ start_podman_api() {
 # Before any podman command, so every one of them sees the same storage.
 /usr/local/bin/shared-images.sh
 
+# Every bind source the runner passes to a job container must exist (a1058).
+/usr/local/bin/bind-sources.sh /home/podman/_work
+
 STATE=${GHA_RUNNER_STATE:-/home/podman/state}
 
 if [ -f "$STATE/.runner" ] && [ -f "$STATE/.credentials" ]; then

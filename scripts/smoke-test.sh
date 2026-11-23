@@ -235,6 +235,41 @@ docker rm -f smoke_job smoke_svc >/dev/null
 docker network rm smoke_net >/dev/null
 echo "job container and service on a named network: ok"'
 
+echo "== every bind source of a job container exists, so podman can create it (a1058)"
+# The runner's `docker create` for `container:` always passes these -v flags,
+# mirroring actions/runner ContainerOperationProvider. Against a fresh _work
+# (no `uses:` has made _actions or _tool) podman refuses the first missing
+# source: statfs ..._actions: no such file or directory, exit 125.
+run_in_image 'set -euo pipefail
+export XDG_RUNTIME_DIR=/home/podman/.runtime
+mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
+W=/home/podman/_work; E=/home/podman/actions-runner/externals
+img=registry.access.redhat.com/ubi10/ubi-minimal:latest
+podman pull -q "$img" >/dev/null
+create() {
+  docker create --name bind_probe \
+    -v "$W":/__w -v "$E":/__e:ro -v "$W/_temp":/__w/_temp \
+    -v "$W/_actions":/__w/_actions -v "$W/_tool":/__w/_tool \
+    -v "$W/_temp/_github_home":/github/home \
+    -v "$W/_temp/_github_workflow":/github/workflow \
+    --entrypoint tail "$img" -f /dev/null
+}
+rm -rf "$W"; mkdir -p "$W"
+if create >/dev/null 2>/tmp/err; then
+  echo "create succeeded on a bare _work: this test no longer reproduces a1058" >&2; exit 1
+fi
+grep -q "no such file or directory" /tmp/err || { cat /tmp/err >&2; exit 1; }
+echo "bare _work refused, as in a1058: ok"
+/usr/local/bin/bind-sources.sh "$W"
+create >/dev/null
+podman rm -f bind_probe >/dev/null
+echo "create after bind-sources.sh: ok"
+# job-completed.sh wipes _work and must leave it usable for the next job.
+/usr/local/bin/job-completed.sh
+create >/dev/null
+podman rm -f bind_probe >/dev/null
+echo "create after job-completed.sh: ok"'
+
 # podman 6 reads the base's 20-image_build.conf, which would put every job on
 # fuse-overlayfs with fsync=0; the image's 30-gha-runner.conf must win.
 echo "== GHA_SHARED_IMAGES unset or missing: native overlay, no drop-in written"
