@@ -83,6 +83,7 @@ if [ -f "$STATE/.runner" ] && [ -f "$STATE/.credentials" ]; then
   # So it stays up and takes jobs continuously. Workspace hygiene comes from
   # the job-completed hook instead, which wipes _work between jobs.
   export ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/usr/local/bin/job-completed.sh
+  export ACTIONS_RUNNER_HOOK_JOB_STARTED=/usr/local/bin/bind-sources.sh
   exec ./run.sh
 fi
 
@@ -143,4 +144,5 @@ fi
 
 start_podman_api
 export ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/usr/local/bin/job-completed.sh
+export ACTIONS_RUNNER_HOOK_JOB_STARTED=/usr/local/bin/bind-sources.sh
 exec ./run.sh

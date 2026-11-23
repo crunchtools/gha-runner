@@ -235,6 +235,53 @@ docker rm -f smoke_job smoke_svc >/dev/null
 docker network rm smoke_net >/dev/null
 echo "job container and service on a named network: ok"'
 
+echo "== every bind source of a job container exists when the runner creates it (a1058)"
+# Mirrors the runner's job: PrepareActionsAsync deletes _work/_actions, then the
+# job-started hook runs, then "Initialize containers" does a `docker create`
+# with these -v flags (ContainerOperationProvider). Without the hook podman
+# refuses the missing source: statfs ..._actions: no such file or directory.
+run_in_image 'set -euo pipefail
+export XDG_RUNTIME_DIR=/home/podman/.runtime
+mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
+W=/home/podman/_work; E=/home/podman/actions-runner/externals
+img=registry.access.redhat.com/ubi10/ubi-minimal:latest
+podman pull -q "$img" >/dev/null
+create() {
+  docker create --name bind_probe \
+    -v "$W":/__w -v "$E":/__e:ro -v "$W/_temp":/__w/_temp \
+    -v "$W/_actions":/__w/_actions -v "$W/_tool":/__w/_tool \
+    -v "$W/_temp/_github_home":/github/home \
+    -v "$W/_temp/_github_workflow":/github/workflow \
+    --entrypoint tail "$img" -f /dev/null
+}
+# A job start: the runner makes _temp and its children, and deletes _actions.
+job_start() {
+  rm -rf "$W"; mkdir -p "$W/_temp/_github_home" "$W/_temp/_github_workflow"
+}
+hook=$(sed -n "s/^ *export ACTIONS_RUNNER_HOOK_JOB_STARTED=//p" /usr/local/bin/entrypoint.sh | sort -u)
+[ "$(wc -l <<<"$hook")" = 1 ] && [ -x "$hook" ] \
+  || { echo "entrypoint does not export one executable job-started hook: $hook" >&2; exit 1; }
+[ "$(grep -c "export ACTIONS_RUNNER_HOOK_JOB_STARTED=" /usr/local/bin/entrypoint.sh)" = 2 ] \
+  || { echo "job-started hook not exported on both start paths" >&2; exit 1; }
+job_start
+if create >/dev/null 2>/tmp/err; then
+  echo "create succeeded with no hook: this test no longer reproduces a1058" >&2; exit 1
+fi
+grep -q "no such file or directory" /tmp/err || { cat /tmp/err >&2; exit 1; }
+echo "no hook: create refused, as in a1058: ok"
+job_start
+"$hook"
+create >/dev/null
+podman rm -f bind_probe >/dev/null
+echo "job-started hook then create: ok"
+# The wipe after a job, then the next job start, must work the same way.
+/usr/local/bin/job-completed.sh
+job_start
+"$hook"
+create >/dev/null
+podman rm -f bind_probe >/dev/null
+echo "second job after job-completed.sh: ok"'
+
 # podman 6 reads the base's 20-image_build.conf, which would put every job on
 # fuse-overlayfs with fsync=0; the image's 30-gha-runner.conf must win.
 echo "== GHA_SHARED_IMAGES unset or missing: native overlay, no drop-in written"
