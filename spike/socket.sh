@@ -3,11 +3,11 @@
 # Runs in docker:cli with /var/run/docker.sock mounted. Prints RESULT lines.
 set -u
 NESTED=docker.io/library/docker@sha256:cd58b396e427d1ee8cddcc3f3b7e8d8c2ba45755c5dd5b821b6e615e1ccf4586
-PODMAN=quay.io/podman/stable@sha256:f4ca9cbb3a7c33c168d565d2ba75882903f4440561e8ffd825249f9c9b84f28b
+PODMAN=quay.io/containers/podman@sha256:6cccd812027425f33fd7c65ca13e0ae6e19c5230a27a78708b199cf97569d85e
 fails=0
 result() { echo "RESULT $1 $2${3:+ ($3)}"; [ "$2" = pass ] || [ "$2" = info ] || fails=$((fails + 1)); }
 
-echo "server: $(docker version --format '{{.Server.Version}} {{.Server.Os}}/{{.Server.Arch}}' 2>&1)"
+echo "server: $(docker version --format '{{.Server.Version}} {{.Server.Os}}' 2>&1)"
 docker info --format 'name={{.Name}} driver={{.Driver}} rootless={{.SecurityOptions}}' 2>&1 | head -3
 docker run --rm "$NESTED" true && result socket-nested-run pass || result socket-nested-run fail
 
@@ -43,7 +43,7 @@ out=$(docker run --rm --cap-drop=all --network=none -v "$host_ws:/w:ro" "$NESTED
   env | grep -iE "token|secret|github_" && echo LEAK-ENV
   [ -e /var/run/docker.sock ] && echo LEAK-SOCKET
   wget -q -T 5 -O /dev/null https://quay.io/ 2>/dev/null && echo LEAK-NET
-  ls /sys/class/net
+  sed -n "3,\$p" /proc/net/dev | cut -d: -f1 | tr -d " "
   echo done' 2>&1)
 echo "$out"
 case "$out" in *LEAK*) result nested-isolation fail "$out" ;; *done*) result nested-isolation pass ;; *) result nested-isolation fail "$out" ;; esac
@@ -60,7 +60,7 @@ for kit in 1 0; do
     break
   fi
   echo "build with DOCKER_BUILDKIT=$kit failed:"; tail -5 "$ctx/b.log"
-  [ "$kit" = 0 ] && result build-from-digest fail "both builders"
+  [ "$kit" = 0 ] && result build-from-digest fail "both builders: $(grep -v '^ *$' "$ctx/b.log" | tail -1)"
 done
 docker rmi -f "spike-a1058-build:$marker" >/dev/null 2>&1
 

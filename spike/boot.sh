@@ -19,7 +19,7 @@ set -eu
 BASE=registry.access.redhat.com/ubi10/ubi-micro@sha256:1c1666ee13b1d7c4a438f86bb32772910424c3dc0db2b53b1e52a0d7b987a15b
 COSIGN=ghcr.io/sigstore/cosign/cosign@sha256:ad281047f85c5e1fc6ffbc30c2b55be3b07b4032bef715a12122ce5829619aca
 REGISTRY=docker.io/library/registry@sha256:46faa9a1ae6813194b53921a370f2f4f8c5e1aae228a89bceafef5847a6a3278
-SKOPEO=quay.io/skopeo/stable@sha256:c6707476f189afc51c8f5ed4318ee831d973c33026711f1ffa75dbc80a8d3d17
+SKOPEO=quay.io/containers/skopeo@sha256:0fb57c934e28d541d803bf7d34822acfeac465b26d80b37bc174c1dd7c16fdce
 REG=reg:5000
 REPO=$REG/sdlc
 L=spike=a1058

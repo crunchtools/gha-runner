@@ -1,7 +1,7 @@
 #!/bin/sh
 # a1058: informational probes. Exit 1 means "does not work", so the log is readable.
 NESTED=docker.io/library/docker@sha256:cd58b396e427d1ee8cddcc3f3b7e8d8c2ba45755c5dd5b821b6e615e1ccf4586
-PODMAN=quay.io/podman/stable@sha256:f4ca9cbb3a7c33c168d565d2ba75882903f4440561e8ffd825249f9c9b84f28b
+PODMAN=quay.io/containers/podman@sha256:6cccd812027425f33fd7c65ca13e0ae6e19c5230a27a78708b199cf97569d85e
 self=$(hostname); docker inspect "$self" >/dev/null 2>&1 || self=$(grep -oE '(containers|overlay-containers)/[0-9a-f]{64}' /proc/self/mountinfo | head -1 | sed 's,.*/,,')
 sock=$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}{{.Source}}{{end}}{{end}}' "$self")
 [ -n "$sock" ] || sock=/var/run/docker.sock
