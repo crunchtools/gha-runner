@@ -138,18 +138,13 @@ jobs:
       - { id: e, run: 'eval "$FETCH" && sh /tmp/s.sh ${{ matrix.what }} > /tmp/results 2>&1; rc=$?; cat /tmp/results; exit $rc' }
       - { name: "PROBE ${{ matrix.what }}", if: always(), run: 'grep -qE "^PROBE ${{ matrix.what }} ok" /tmp/results' }
   # Exedore without `container:` (which cannot start there, see a1058): the same scripts as plain steps.
-  socket-host:
+  socket-host:  # one job per check, so each conclusion is readable from the run
+    strategy: { fail-fast: false, matrix: { check: [socket-nested-run, workspace-host-path, workspace-mount, nested-isolation, nested-network-none, build-from-digest] } }
     runs-on: ${{ vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached' }}
     permissions: { contents: read }
     env: { GITHUB_TOKEN: "${{ github.token }}", SCRIPT: socket.sh }
     steps:
-      - { id: e, run: 'eval "$CFETCH" && sh /tmp/s.sh > /tmp/results 2>&1; rc=$?; cat /tmp/results; exit $rc' }
-      - { name: "RESULT socket-nested-run", if: always(), run: 'grep -qE "^RESULT socket-nested-run (pass|info)" /tmp/results' }
-      - { name: "RESULT workspace-host-path", if: always(), run: 'grep -qE "^RESULT workspace-host-path (pass|info)" /tmp/results' }
-      - { name: "RESULT workspace-mount", if: always(), run: 'grep -qE "^RESULT workspace-mount (pass|info)" /tmp/results' }
-      - { name: "RESULT nested-isolation", if: always(), run: 'grep -qE "^RESULT nested-isolation (pass|info)" /tmp/results' }
-      - { name: "RESULT nested-network-none", if: always(), run: 'grep -qE "^RESULT nested-network-none (pass|info)" /tmp/results' }
-      - { name: "RESULT build-from-digest", if: always(), run: 'grep -qE "^RESULT build-from-digest (pass|info)" /tmp/results' }
+      - { run: 'eval "$CFETCH" && sh /tmp/s.sh > /tmp/results 2>&1; cat /tmp/results; grep -qE "^RESULT ${{ matrix.check }} (pass|info)" /tmp/results' }
   boot-host:
     runs-on: ${{ vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached' }}
     permissions: { contents: read }
