@@ -10,10 +10,10 @@ permissions: {}
 defaults: { run: { shell: sh } }
 env:
   FETCH: >-
-    wget -q --header "Authorization: Bearer $GITHUB_TOKEN" --header "Accept: application/vnd.github.raw"
+    wget -q -T 30 --header "Authorization: Bearer $GITHUB_TOKEN" --header "Accept: application/vnd.github.raw"
     -O /tmp/s.sh "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/contents/spike/$SCRIPT?ref=$GITHUB_SHA"
   CFETCH: >-
-    curl -sSf -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github.raw"
+    curl -sSf --retry 6 --retry-all-errors --retry-delay 5 -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github.raw"
     -o /tmp/s.sh "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/contents/spike/$SCRIPT?ref=$GITHUB_SHA"
 jobs:
   socket:  # item 4: socket, path mapping, nested isolation, build FROM @digest
