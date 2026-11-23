@@ -42,12 +42,13 @@ consume)
   got=$(join | sha256sum | cut -d' ' -f1)
   [ "$got" = "$want" ] && result chunks-reassembled pass || result chunks-reassembled fail "$got"
   got=$(docker run --rm -e SDLC_AI_0 -e SDLC_AI_1 -e SDLC_AI_2 -e SDLC_AI_3 "$NESTED" \
-        sh -c 'printf %s "$SDLC_AI_0$SDLC_AI_1$SDLC_AI_2$SDLC_AI_3" | sha256sum' 2>&1 | cut -d' ' -f1)
+        sh -c 'printf %s "$SDLC_AI_0$SDLC_AI_1$SDLC_AI_2$SDLC_AI_3" | sha256sum' 2>/dev/null | tail -1 | cut -d' ' -f1)
   [ "$got" = "$want" ] && result chunks-nested-env pass || result chunks-nested-env fail "$got"
   if (SDLC_AI_0="" SDLC_AI_1="" SDLC_AI_2="" SDLC_AI_3="" join > /dev/null); then
     result write-refuses-empty fail; else result write-refuses-empty pass; fi
   # Why the split exists: one 450,000-byte variable cannot reach a process.
   big=$(join)
+  docker pull -q "$NESTED" >/dev/null 2>&1
   if BIG=$big docker run --rm -e BIG "$NESTED" true 2>/dev/null; then
     result one-var-450000 info "accepted"; else result one-var-450000 info "refused, as MAX_ARG_STRLEN predicts"; fi
   ;;
