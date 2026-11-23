@@ -17,6 +17,7 @@ docker inspect "$(hostname)" >/dev/null 2>&1 && self=$(hostname)
 if [ -z "$self" ]; then
   self=$(grep -oE '(containers|overlay-containers)/[0-9a-f]{64}' /proc/self/mountinfo | head -1 | sed 's,.*/,,')
 fi
+docker inspect "$self" >/dev/null 2>&1 || self=""  # an id our engine cannot see is not us
 echo "self=$self"
 mounts=$(docker inspect --format '{{range .Mounts}}{{.Source}}|{{.Destination}}{{"\n"}}{{end}}' "$self" 2>&1)
 echo "$mounts"
