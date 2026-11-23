@@ -114,7 +114,13 @@ jobs:
     steps:
       - { id: e, run: 'set +e; { eval "$FETCH" || echo "::error::fetch failed"; }; sh /tmp/s.sh ${{ matrix.what }} > /tmp/results 2>&1; rc=$?; cat /tmp/results; grep -E "^(RESULT|CASE|PROBE|server:)" /tmp/results | sed "s/^/::notice::/"; [ "$rc" = 0 ] || tail -6 /tmp/results | sed "s/^/::warning::tail rc=$rc: /"; exit $rc' }
       - { name: "PROBE ${{ matrix.what }}", if: always(), run: 'grep -qE "^PROBE ${{ matrix.what }} ok" /tmp/results' }
-  # Exedore without `container:` (which cannot start there, see a1058): the same scripts as plain steps.
+  container-exh:  # a1121: a `container:` job with no `uses:` starts on Exedore (gha-runner 1.1.5's job-started hook)
+    runs-on: ${{ vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached' }}
+    container: *ubi
+    permissions: {}
+    steps:
+      - { run: 'echo "RESULT container-started pass on $RUNNER_NAME"; cat /etc/os-release | head -2' }
+  # Exedore without `container:` (which could not start there before gha-runner 1.1.5, see a1058): the same scripts as plain steps.
   socket-host:  # results come back as ::notice:: annotations
     runs-on: ${{ vars.UNCACHED_RUNNER_LABEL || 'crunchtools-uncached' }}
     permissions: { contents: read }
