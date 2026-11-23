@@ -23,7 +23,7 @@ LIST=${GHA_IMAGES_LIST:-/srv/gha-runner/config/shared-images.list}
 PENDING=$HOME/prune-next-run
 # The runner image by digest, the same one the units pin (a315): promoted with
 # them, never pulled as :main.
-RUNNER=quay.io/crunchtools/gha-runner@sha256:6cd40aece0759e81bafda4842f910ccb3f60b49954f8b2c5e82872e9cb8573a9
+RUNNER=quay.io/crunchtools/gha-runner@sha256:285f60b442556dbe53b5a2cecfa956ed20a9cd788f302136d01823696de7a381
 
 mapfile -t images < <(grep -vE '^[[:space:]]*(#|$)' "$LIST")
 [ ${#images[@]} -gt 0 ] || { echo "gha-images-warm: $LIST lists no images" >&2; exit 1; }
