@@ -62,9 +62,6 @@ start_podman_api() {
 # Before any podman command, so every one of them sees the same storage.
 /usr/local/bin/shared-images.sh
 
-# Every bind source the runner passes to a job container must exist (a1058).
-/usr/local/bin/bind-sources.sh /home/podman/_work
-
 STATE=${GHA_RUNNER_STATE:-/home/podman/state}
 
 if [ -f "$STATE/.runner" ] && [ -f "$STATE/.credentials" ]; then
@@ -86,6 +83,7 @@ if [ -f "$STATE/.runner" ] && [ -f "$STATE/.credentials" ]; then
   # So it stays up and takes jobs continuously. Workspace hygiene comes from
   # the job-completed hook instead, which wipes _work between jobs.
   export ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/usr/local/bin/job-completed.sh
+  export ACTIONS_RUNNER_HOOK_JOB_STARTED=/usr/local/bin/bind-sources.sh
   exec ./run.sh
 fi
 
@@ -146,4 +144,5 @@ fi
 
 start_podman_api
 export ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/usr/local/bin/job-completed.sh
+export ACTIONS_RUNNER_HOOK_JOB_STARTED=/usr/local/bin/bind-sources.sh
 exec ./run.sh

@@ -10,12 +10,13 @@ All notable changes to this project are documented here. The format follows
 
 - **`container:` jobs start without a `uses:`** (a1058). The runner always
   bind-mounts `_work/_actions` and `_work/_tool` into a job container, but
-  creates them only when a job downloads an action. Docker makes a missing
-  bind source; podman refuses it, so `docker create` died with `statfs
-  /home/podman/_work/_actions: no such file or directory` (exit 125) in any
-  workflow with no `uses:`. A new `bind-sources.sh` creates every source the
-  runner passes; the entrypoint runs it before the runner starts and
-  `job-completed.sh` runs it again after wiping `_work`. The smoke test
+  podman, unlike docker, will not create a missing bind source, so `docker
+  create` died with `statfs /home/podman/_work/_actions: no such file or
+  directory` (exit 125) in any workflow with no `uses:`. The runner deletes
+  `_actions` at the start of every job, so no earlier step can hold it. A
+  new `bind-sources.sh` creates `_actions` and `_tool` and runs as the
+  runner's job-started hook (`ACTIONS_RUNNER_HOOK_JOB_STARTED`), which runs
+  after that delete and before "Initialize containers". The smoke test
   reproduces the failure with the runner's `-v` flags and asserts the fix.
 - **The build checks the base's rootless volumes** (a472 review). It fails
   unless `/proc:/proc` is the only volume in the base's

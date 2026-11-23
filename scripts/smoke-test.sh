@@ -235,11 +235,11 @@ docker rm -f smoke_job smoke_svc >/dev/null
 docker network rm smoke_net >/dev/null
 echo "job container and service on a named network: ok"'
 
-echo "== every bind source of a job container exists, so podman can create it (a1058)"
-# The runner's `docker create` for `container:` always passes these -v flags,
-# mirroring actions/runner ContainerOperationProvider. Against a fresh _work
-# (no `uses:` has made _actions or _tool) podman refuses the first missing
-# source: statfs ..._actions: no such file or directory, exit 125.
+echo "== every bind source of a job container exists when the runner creates it (a1058)"
+# Mirrors the runner's job: PrepareActionsAsync deletes _work/_actions, then the
+# job-started hook runs, then "Initialize containers" does a `docker create`
+# with these -v flags (ContainerOperationProvider). Without the hook podman
+# refuses the missing source: statfs ..._actions: no such file or directory.
 run_in_image 'set -euo pipefail
 export XDG_RUNTIME_DIR=/home/podman/.runtime
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
@@ -254,21 +254,33 @@ create() {
     -v "$W/_temp/_github_workflow":/github/workflow \
     --entrypoint tail "$img" -f /dev/null
 }
-rm -rf "$W"; mkdir -p "$W"
+# A job start: the runner makes _temp and its children, and deletes _actions.
+job_start() {
+  rm -rf "$W"; mkdir -p "$W/_temp/_github_home" "$W/_temp/_github_workflow"
+}
+hook=$(sed -n "s/^ *export ACTIONS_RUNNER_HOOK_JOB_STARTED=//p" /usr/local/bin/entrypoint.sh | sort -u)
+[ "$(wc -l <<<"$hook")" = 1 ] && [ -x "$hook" ] \
+  || { echo "entrypoint does not export one executable job-started hook: $hook" >&2; exit 1; }
+[ "$(grep -c "export ACTIONS_RUNNER_HOOK_JOB_STARTED=" /usr/local/bin/entrypoint.sh)" = 2 ] \
+  || { echo "job-started hook not exported on both start paths" >&2; exit 1; }
+job_start
 if create >/dev/null 2>/tmp/err; then
-  echo "create succeeded on a bare _work: this test no longer reproduces a1058" >&2; exit 1
+  echo "create succeeded with no hook: this test no longer reproduces a1058" >&2; exit 1
 fi
 grep -q "no such file or directory" /tmp/err || { cat /tmp/err >&2; exit 1; }
-echo "bare _work refused, as in a1058: ok"
-/usr/local/bin/bind-sources.sh "$W"
+echo "no hook: create refused, as in a1058: ok"
+job_start
+"$hook"
 create >/dev/null
 podman rm -f bind_probe >/dev/null
-echo "create after bind-sources.sh: ok"
-# job-completed.sh wipes _work and must leave it usable for the next job.
+echo "job-started hook then create: ok"
+# The wipe after a job, then the next job start, must work the same way.
 /usr/local/bin/job-completed.sh
+job_start
+"$hook"
 create >/dev/null
 podman rm -f bind_probe >/dev/null
-echo "create after job-completed.sh: ok"'
+echo "second job after job-completed.sh: ok"'
 
 # podman 6 reads the base's 20-image_build.conf, which would put every job on
 # fuse-overlayfs with fsync=0; the image's 30-gha-runner.conf must win.

@@ -11,6 +11,4 @@
 set -u
 podman rm -af >/dev/null 2>&1 || true
 rm -rf "${RUNNER_WORKSPACE:-/home/podman/_work}"/* 2>/dev/null || true
-# The wipe took the runner's bind sources with it; the next job needs them (a1058).
-/usr/local/bin/bind-sources.sh /home/podman/_work || true
 exit 0
