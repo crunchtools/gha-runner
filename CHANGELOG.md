@@ -31,11 +31,20 @@ All notable changes to this project are documented here. The format follows
   `container.yml` builds it with RHSM, gates it (`bootc container lint` and
   `scripts/vm-smoke-test.sh`) and signs it.
 
+### Added
+
+- `gha-runner-vm-promote sha256:<digest>`: the one command that swaps the VM
+  image pin and starts the disk rebuild, digest-only so it can run unattended.
+
 ### Fixed
 
 - **Jobs get a `HOME`.** `gha-runner.service` runs as root with no `User=`, so
   systemd set no `HOME`, and `sdlc`'s launcher (`set -u`) died on
   `HOME: unbound variable`. The unit sets `HOME=/root`; the smoke test checks it.
+- **The VM base disk builds on the onsite disk.** bootc-image-builder's `/store`
+  was an anonymous podman volume on Exedore's `/var` (6.6 GB free), which the
+  3.4 GB image plus its ostree commit filled: `syncfs(repo): No space left on
+  device`. `gha-runner-vm-disk` now mounts it from the build's work directory.
 - **The VM image ships the tools jobs ran on**: git, the gh CLI (2.103.0,
   sha256-verified), skopeo, openssl, python3-pip and the browser libraries the
   container runner had. Without git, `actions/checkout` fell back to a REST

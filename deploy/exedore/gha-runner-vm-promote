@@ -1,0 +1,20 @@
+#!/bin/bash
+# gha-runner-vm-promote -- point the runner VMs at a new image digest and
+# rebuild their base disk (RT #1664). Installed at
+# /srv/gha-runner/bin/gha-runner-vm-promote, root-owned, run as root.
+#
+# Takes exactly one argument, a sha256 digest of quay.io/crunchtools/gha-runner,
+# and nothing else: it is the one command an agent may run here without a
+# person, so it can only swap one pinned digest for another. Land the same
+# digest in deploy/exedore/gha-runner-vm.env by pull request.
+set -euo pipefail
+ENV=/srv/gha-runner/config/gha-runner-vm.env
+REPO=quay.io/crunchtools/gha-runner
+[ $# -eq 1 ] && [[ $1 =~ ^sha256:[0-9a-f]{64}$ ]] \
+  || { echo "usage: gha-runner-vm-promote sha256:<64 hex>" >&2; exit 2; }
+install -d -m 0700 /root/.backups
+cp -p "$ENV" "/root/.backups/gha-runner-vm.env.$(date +%Y%m%d%H%M%S)"
+sed -i "s#^GHA_VM_IMAGE=.*#GHA_VM_IMAGE=$REPO@$1#" "$ENV"
+grep -qx "GHA_VM_IMAGE=$REPO@$1" "$ENV" || { echo "gha-runner-vm-promote: pin not written" >&2; exit 1; }
+systemctl start --no-block gha-runner-vm-disk
+echo "promoted $REPO@$1; base disk rebuilding (journalctl -u gha-runner-vm-disk)"

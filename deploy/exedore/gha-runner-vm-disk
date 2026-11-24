@@ -19,12 +19,16 @@ install -d -m 0755 "$DIR"
 work=$(mktemp -d "$DIR/build.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 printf '[customizations.disk]\nminsize = "40 GiB"\n' > "$work/config.toml"
-install -d "$work/tmp"
+install -d "$work/tmp" "$work/store"
 
+# /store is bootc-image-builder's working store. Left anonymous it is a podman
+# volume on /var, which a 3.4 GB image plus its ostree commit fills (ENOSPC,
+# 2026-11-24); here it is on the onsite disk with the rest of the build.
 podman pull -q "$IMAGE" >/dev/null
 podman run --rm --privileged --pull=missing --security-opt label=type:unconfined_t \
   -v /var/lib/containers/storage:/var/lib/containers/storage \
   -v "$work/config.toml":/config.toml:ro -v "$work":/output -v "$work/tmp":/var/tmp \
+  -v "$work/store":/store \
   "$BIB" --type qcow2 --rootfs xfs --use-librepo=true "$IMAGE"
 
 chmod 0644 "$work/qcow2/disk.qcow2"
