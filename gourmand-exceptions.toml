@@ -17,9 +17,3 @@ check = "IF001-linter_configuration"
 path = ".pre-commit-config.yaml"
 justification = "Same reason: no Python package here to lint with a ruff hook; the two scripts are exercised by their unittest suite in CI on every change."
 classification = "by_design"
-
-[[exceptions]]
-check = "CH001-absolute_paths"
-path = "containers/policy.json"
-justification = "The image installs this as the system containers policy, and containers-policy.json(5) requires each keyPath to be an absolute path to a key inside the image; a relative one cannot resolve."
-classification = "by_design"

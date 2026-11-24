@@ -1,3 +1,11 @@
+# The runner: a RHEL bootc VM image (Containerfile) that Exedore turns into a
+# qcow2 and boots once per job (RT #1664). It replaced the rootless container
+# image (1.1.x) in this same Quay repository.
+#
+# Gated like rhel10-bootc-server: a plain OCI manifest, then
+# scripts/vm-smoke-test.sh (which runs `bootc container lint`) against the
+# pushed digest.
+
 name: Container
 
 on:
@@ -5,10 +13,8 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
-  # Weekly, so Fedora's security updates reach the runner without anyone
-  # remembering to push. The base is pinned by digest; the update comes from
-  # the Containerfile's `dnf -y upgrade`, which UPGRADE_STAMP forces past the
-  # layer cache. A CI runner executes repository code; a stale one is a liability.
+  # Weekly, so RHEL errata reach the runner without anyone remembering to
+  # push: the Containerfile's `dnf update` runs fresh on every build.
   schedule:
     - cron: "30 4 * * 1"
   workflow_dispatch:
@@ -24,15 +30,20 @@ jobs:
       pull-requests: read
     with:
       image: quay.io/crunchtools/gha-runner
-      build-args: |
-        UPGRADE_STAMP=${{ github.run_id }}
-      # The one property that makes this image usable is that a job can build
-      # AND run containers inside it, so the gate is the repo's own smoke test
-      # (runner version, docker shim, hook permissions, nested build, nested
-      # run), run against the pushed digest.
+      format: oci
+      free-disk: true
+      redhat-registry: true
+      rhsm: true
       boot: command
-      boot-command: ENGINE=podman bash scripts/smoke-test.sh "$IMAGE"
+      boot-command: bash scripts/vm-smoke-test.sh "$IMAGE"
       boot-timeout: 600
+      sign: true
     secrets:
       QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
       QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
+      REGISTRY_REDHAT_IO_USER: ${{ secrets.REGISTRY_REDHAT_IO_USER }}
+      REGISTRY_REDHAT_IO_PASSWORD: ${{ secrets.REGISTRY_REDHAT_IO_PASSWORD }}
+      RHSM_ACTIVATION_KEY: ${{ secrets.RHSM_ACTIVATION_KEY }}
+      RHSM_ORG_ID: ${{ secrets.RHSM_ORG_ID }}
+      COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+      COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}

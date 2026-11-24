@@ -1,11 +1,5 @@
-# sdlc's configuration for this repo, which has no pyproject.toml.
-#
-# container-build passes UPGRADE_STAMP the way container.yml does, so the
-# Containerfile's `dnf -y upgrade` layer is rebuilt on every run. Without it
-# the stamp is "unset" on every build, and a cached runner's persistent layer
-# cache replays whatever package layer it first built, for good: on 2026-11-18
-# that was a lagging Fedora mirror's skopeo 1.24.1-1 (Go x/net 0.56.0,
-# GO-2026-6612) instead of 1.25.1-2, and container-scan failed every run (a315).
-# A fresh layer can still land on a lagging mirror; a re-run picks another.
-[tool.sdlc.ci.container-build]
-build_args = { UPGRADE_STAMP = "@now" }
+[tool.sdlc]
+# The image is a RHEL bootc VM (Containerfile). sdlc has no checks for the
+# bootc stack yet, and a stack it cannot check makes every run exit 2; the
+# Container workflow builds, lints and smoke-tests it instead.
+skip-stacks = ["bootc"]

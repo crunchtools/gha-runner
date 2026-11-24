@@ -6,16 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Added
+### Changed
 
-- **The runner as a RHEL bootc VM** (RT #1664). `vm/Containerfile` builds
-  `quay.io/crunchtools/gha-runner-vm` on `rhel10/rhel-bootc` (pinned by digest): podman, the
-  docker CLI (pinned by digest) on podman's socket, and runner 2.338.2
-  verified by sha256. Each boot runs one job from a just-in-time config passed
-  as the `gha.jitconfig` systemd credential, then powers off. The host's image
-  cache mounts read-only from virtiofs tag `images` as an additional image
-  store. `container-vm.yml` builds, gates (`bootc container lint` and
-  `scripts/vm-smoke-test.sh`) and signs it through container-release.
+- **Breaking: the runner is a RHEL bootc VM image** (RT #1664). The
+  Containerfile now builds `quay.io/crunchtools/gha-runner` on
+  `rhel10/rhel-bootc` (pinned by digest): podman, the docker CLI (pinned by
+  digest) on podman's socket, and runner 2.338.2 verified by sha256. Each boot
+  runs one job from a just-in-time config passed as the `gha.jitconfig`
+  systemd credential, then powers off. The host's image cache mounts
+  read-only from virtiofs tag `images` as an additional image store.
+  `container.yml` builds it with RHSM, gates it (`bootc container lint` and
+  `scripts/vm-smoke-test.sh`) and signs it.
+
+### Removed
+
+- The rootless Fedora container image and its scripts (`entrypoint.sh`,
+  `bind-sources.sh`, `job-completed.sh`, `smoke-test.sh`, `containers/`).
+  Exedore's container runners keep 1.1.5 by digest until the VM slots
+  replace them.
 
 ## [1.1.5] - 2026-11-22
 

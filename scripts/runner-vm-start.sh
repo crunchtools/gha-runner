@@ -1,5 +1,5 @@
 #!/bin/sh
-# The runner VM's one job: vm/Containerfile installs this as
+# The runner VM's one job: the Containerfile installs this as
 # /usr/libexec/runner-start.sh and gha-runner.service runs it.
 #
 # The just-in-time config arrives as a systemd credential (SMBIOS type 11 from
