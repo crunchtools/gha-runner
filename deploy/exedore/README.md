@@ -23,7 +23,7 @@ AppRole, so an escape from one instance reaches neither another's cache nor its 
 ## Runner VMs (RT #1664)
 
 Replaces the container runners above: five identical slots,
-`gha-runner-vm@1..5`, each running one job in a fresh RHEL bootc VM and
+`gha-runner@1..5` (VM hostnames `gha-runner1..5`, GitHub names `gha-runnerN-<timestamp>`), each running one job in a fresh RHEL bootc VM and
 registering with both labels, so `crunchtools-cached` and
 `crunchtools-uncached` route to the same pool. Two levels, as on a
 GitHub-hosted runner: the VM's root podman (its socket is the job's
@@ -31,7 +31,7 @@ GitHub-hosted runner: the VM's root podman (its socket is the job's
 
 | Piece | Where |
 |---|---|
-| Units | `gha-runner-vm@.service`, `gha-runner-vm-disk.service`, `gha-runner-vm-store.{service,timer}` |
+| Units | `gha-runner@.service`, `gha-runner-vm-disk.service`, `gha-runner-vm-store.{service,timer}` |
 | Scripts | `/srv/gha-runner/bin/gha-runner-vm{,-mint,-disk,-store}` |
 | Env (no secrets) | `/srv/gha-runner/config/gha-runner-vm.env`: labels and the VM image pin |
 | Users | `/etc/sysusers.d/gha-runner-vm.conf`: `ghvmN` uid 2150+N, in `kvm`, inside the egress fence |

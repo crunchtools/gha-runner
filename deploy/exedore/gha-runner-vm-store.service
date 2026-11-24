@@ -9,5 +9,5 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/srv/gha-runner/bin/gha-runner-vm-store
+ExecStart=/usr/bin/bash /srv/gha-runner/bin/gha-runner-vm-store
 TimeoutStartSec=30min

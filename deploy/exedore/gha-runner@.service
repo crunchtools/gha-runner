@@ -1,7 +1,7 @@
 # One disposable runner VM slot (RT #1664). Each start runs exactly one job in
-# a fresh VM; Restart=always brings up the next. Five slots: gha-runner-vm@1..5.
+# a fresh VM; Restart=always brings up the next. Five slots: gha-runner@1..5.
 [Unit]
-Description=GitHub Actions runner VM slot %i (exedore, one job per VM)
+Description=GitHub Actions runner gha-runner%i (exedore, one job per VM)
 Documentation=https://github.com/crunchtools/gha-runner/blob/main/deploy/exedore/README.md
 Requires=srv-secrets@gha-runner-uncached1.service gha-runner-egress.service
 After=srv-secrets@gha-runner-uncached1.service gha-runner-egress.service network-online.target
@@ -12,9 +12,8 @@ ConditionPathExists=/var/mnt/onsite/gha-runner-cache/vm/base.qcow2
 [Service]
 Type=simple
 Slice=gha-runner.slice
-EnvironmentFile=/srv/gha-runner/config/gha-runner-vm.env
 Environment=GHA_APP_KEY_FILE=/run/srv-secrets/gha-runner-uncached1/gha-app.pem
-ExecStart=/srv/gha-runner/bin/gha-runner-vm %i
+ExecStart=/usr/bin/bash /srv/gha-runner/bin/gha-runner-vm %i
 Restart=always
 RestartSec=3
 TimeoutStopSec=60

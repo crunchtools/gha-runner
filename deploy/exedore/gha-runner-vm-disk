@@ -7,6 +7,8 @@
 # from. The new disk is renamed into place: a VM already running keeps the old
 # one open, and the next VM starts on the new one.
 set -euo pipefail
+# systemd cannot read an EnvironmentFile under /srv (var_t), so source it here.
+set -a; . /srv/gha-runner/config/gha-runner-vm.env; set +a
 IMAGE=${GHA_VM_IMAGE:?}
 BIB=${GHA_VM_BIB:?}
 DIR=/var/mnt/onsite/gha-runner-cache/vm
@@ -16,12 +18,13 @@ DIR=/var/mnt/onsite/gha-runner-cache/vm
 install -d -m 0755 "$DIR"
 work=$(mktemp -d "$DIR/build.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-printf '[[customizations.filesystem]]\nmountpoint = "/"\nminsize = "40 GiB"\n' > "$work/config.toml"
+printf '[customizations.disk]\nminsize = "40 GiB"\n' > "$work/config.toml"
+install -d "$work/tmp"
 
 podman pull -q "$IMAGE" >/dev/null
 podman run --rm --privileged --pull=missing --security-opt label=type:unconfined_t \
   -v /var/lib/containers/storage:/var/lib/containers/storage \
-  -v "$work/config.toml":/config.toml:ro -v "$work":/output \
+  -v "$work/config.toml":/config.toml:ro -v "$work":/output -v "$work/tmp":/var/tmp \
   "$BIB" --type qcow2 --rootfs xfs --use-librepo=true "$IMAGE"
 
 chmod 0644 "$work/qcow2/disk.qcow2"
