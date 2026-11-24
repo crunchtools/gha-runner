@@ -147,7 +147,7 @@ three names `:main` or `--pull=newer`, or if they pin different digests.
 1. Resolve the release's digest (tags carry no `v`):
    `podman pull -q quay.io/crunchtools/gha-runner:1.2.0 && podman image inspect --format '{{.Digest}}' quay.io/crunchtools/gha-runner:1.2.0`.
 2. Verify it by digest, on a host that can run nested containers:
-   `ENGINE=podman scripts/smoke-test.sh quay.io/crunchtools/gha-runner@<digest>`.
+   `ENGINE=podman scripts/smoke-test.sh quay.io/crunchtools/gha-runner@<digest>` (from v1.1.5; 2.x is the VM image).
    That includes the bogus-token registration, the TLS round trip the libssl
    outage failed.
 3. Canary one uncached runner. An instance file overrides the template:

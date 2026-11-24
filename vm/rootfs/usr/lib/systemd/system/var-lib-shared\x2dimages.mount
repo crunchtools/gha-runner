@@ -1,0 +1,14 @@
+# The host's image cache, read-only, listed in storage.conf's
+# additionalimagestores. Wanted, not required: a VM booted without the share
+# still runs its job, pulling what it needs.
+[Unit]
+Description=Shared container images from the host (virtiofs, read-only)
+
+[Mount]
+What=images
+Where=/var/lib/shared-images
+Type=virtiofs
+Options=ro
+
+[Install]
+WantedBy=local-fs.target

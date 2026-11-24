@@ -3,6 +3,13 @@
 The self-hosted GitHub Actions runner image for Crunchtools. It takes one job,
 runs it, and exits.
 
+Since 2.0.0 the image is a RHEL bootc VM (RT #1664): Exedore builds a qcow2
+from it and boots a fresh overlay per job (`deploy/exedore/gha-runner-vm`),
+so a job gets its own kernel and nests containers two levels deep, as on a
+GitHub-hosted runner. Being bootc, it still runs as a container for the
+smoke test. The sections below on the rootless container image describe 1.1.x,
+which Exedore's container runners keep running by digest until they retire.
+
 Generic by construction: nothing in the image names a repository. Runners
 register to the crunchtools org in a runner group; the group's repository list
 and each repository's `runs-on` decide who uses them, so a second consumer is a
@@ -122,7 +129,7 @@ nothing is written and the runner stays on native overlay.
 
 Read-only is the point: a job can use an image from the store and cannot
 change, add or remove one, so nothing a job does reaches the next job through
-it. `scripts/smoke-test.sh` checks the store, the read-only half, and that
+it. `scripts/smoke-test.sh` (1.1.x) checked the store, the read-only half, and that
 nothing changes when the variable is unset.
 
 ## Job containers and services
