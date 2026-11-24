@@ -10,7 +10,7 @@ set -euo pipefail
 IMAGE=${GHA_VM_IMAGE:?}
 BIB=${GHA_VM_BIB:?}
 DIR=/var/mnt/onsite/gha-runner-cache/vm
-[[ $IMAGE == *@sha256:* ]] || { echo "gha-runner-vm-disk: $IMAGE is not pinned by digest" >&2; exit 2; }
+[[ $IMAGE =~ @sha256:[0-9a-f]{64}$ ]] || { echo "gha-runner-vm-disk: $IMAGE is not pinned by digest" >&2; exit 2; }
 [ "$(cat "$DIR/base.image" 2>/dev/null)" = "$IMAGE" ] && { echo "base disk is current: $IMAGE"; exit 0; }
 
 install -d -m 0755 "$DIR"
