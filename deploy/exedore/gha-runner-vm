@@ -38,7 +38,7 @@ launch() {
       -chardev socket,id=vfs,path="$run/images.sock" \
       -device vhost-user-fs-pci,chardev=vfs,tag=images \
       -netdev user,id=n0 -device virtio-net-pci,netdev=n0 \
-      -smbios type=11,path="$run/jit" -smbios type=11,path="$run/tmpfiles" \
+      -smbios type=11,path="$run/jit" \
       -smbios type=11,path="$run/hostname" \
       -display none -serial file:"$run/console" -no-reboot
 }
@@ -63,11 +63,6 @@ printf 'io.systemd.credential:gha.jitconfig=%s' "$(bash /srv/gha-runner/bin/gha-
 chgrp "$VMUID" "$RUN/jit"; chmod 0640 "$RUN/jit"
 printf 'io.systemd.credential:system.hostname=gha-runner%s' "$N" > "$RUN/hostname"
 chgrp "$VMUID" "$RUN/hostname"; chmod 0640 "$RUN/hostname"
-# Job containers get no SELinux labels: the runner bind-mounts the workspace
-# without relabelling it, and in a one-job VM the hypervisor is the boundary.
-# (Inner-loop injection; moves into the image once proven.)
-printf 'io.systemd.credential.binary:tmpfiles.extra=%s' "$(printf 'f+ /etc/containers/containers.conf.d/50-gha-nolabel.conf 0644 root root - [containers]\\nlabel = false\\n\n' | base64 -w0)" > "$RUN/tmpfiles"
-chgrp "$VMUID" "$RUN/tmpfiles"; chmod 0640 "$RUN/tmpfiles"
 
 if [ -x /usr/libexec/qemu-kvm ]; then
   qemu-img create -q -f qcow2 -b "$BASE" -F qcow2 "$DISK"
