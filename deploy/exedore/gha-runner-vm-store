@@ -1,0 +1,36 @@
+#!/bin/bash
+# gha-runner-vm-store -- refresh the runner VMs' read-only image store
+# (RT #1664). Installed at /srv/gha-runner/bin/gha-runner-vm-store; run as root
+# by gha-runner-vm-store.service, hourly and at boot.
+#
+# A plain rootful store, unlike gha-images-warm's: each VM's engine is root, so
+# the files keep their true owners and need no override_stat. virtiofsd serves
+# it read-only to every VM, which lists it as an additional image store; a job
+# pulls only what is not here, into its own disposable disk.
+#
+# Untagged versions are removed one run AFTER they lose their tag, so a job
+# that started on the old version keeps its layers for at least an hour.
+set -euo pipefail
+STORE=/var/mnt/onsite/gha-runner-cache/vm-images
+LIST=/srv/gha-runner/config/shared-images.list
+PENDING=/var/lib/gha-runner-vm-store/prune-next-run
+install -d -m 0755 "$STORE" "${PENDING%/*}"
+
+mapfile -t images < <(grep -vE '^[[:space:]]*(#|$)' "$LIST")
+[ ${#images[@]} -gt 0 ] || { echo "gha-runner-vm-store: $LIST lists no images" >&2; exit 1; }
+store() { podman --root "$STORE" --runroot /run/gha-runner-vm-store "$@"; }
+
+if [ -s "$PENDING" ]; then
+  still=$(store images -q --no-trunc --filter dangling=true)
+  while read -r id; do
+    grep -qx "$id" <<<"$still" && store rmi "$id" >/dev/null && echo "pruned $id"
+  done < "$PENDING"
+fi
+
+failed=0
+for image in "${images[@]}"; do
+  if store pull -q "$image" >/dev/null; then echo "warm $image"; else echo "FAILED $image" >&2; failed=1; fi
+done
+store images -q --no-trunc --filter dangling=true > "$PENDING"
+du -sh "$STORE"
+exit "$failed"

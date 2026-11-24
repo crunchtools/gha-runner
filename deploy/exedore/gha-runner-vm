@@ -1,0 +1,54 @@
+#!/bin/bash
+# gha-runner-vm N -- run ONE job in a fresh VM, then exit; systemd restarts it
+# for the next (RT #1664). Installed at /srv/gha-runner/bin/gha-runner-vm; run
+# as root by gha-runner-vm@N.service.
+#
+# Two levels, like a GitHub-hosted runner: the VM's own engine, then the job
+# container, which may nest rootless podman. The VM is a throwaway overlay on
+# the base disk, deleted on the way in and out, so no job sees another's state.
+#
+# qemu runs as ghvmN (uid 2150+N), inside the egress fence's uid range, so the
+# VM's traffic is fenced exactly as the container runners' was. virtiofsd runs
+# as root because the shared store holds root-only files; it serves the store
+# read-only.
+set -euo pipefail
+N=${1:?usage: gha-runner-vm N}
+CACHE=/var/mnt/onsite/gha-runner-cache
+BASE=$CACHE/vm/base.qcow2
+STORE=$CACHE/vm-images
+RUN=/run/gha-runner-vm/$N
+DISK=$CACHE/vm/run$N.qcow2
+VMUSER=ghvm$N
+NAME=exedore-vm$N-$(date +%s)
+
+[ -r "$BASE" ] || { echo "gha-runner-vm: no base disk at $BASE (run gha-runner-vm-disk)" >&2; exit 2; }
+rm -rf "$RUN" "$DISK"
+install -d -m 0770 -o root -g "$VMUSER" "$RUN"
+cleanup() { [ -n "${VFS:-}" ] && kill "$VFS" 2>/dev/null; rm -rf "$RUN" "$DISK"; }
+trap cleanup EXIT
+
+umask 077
+printf 'io.systemd.credential:gha.jitconfig=%s' "$(/srv/gha-runner/bin/gha-runner-vm-mint "$NAME")" > "$RUN/jit"
+chgrp "$VMUSER" "$RUN/jit"; chmod 0640 "$RUN/jit"
+
+qemu-img create -q -f qcow2 -b "$BASE" -F qcow2 "$DISK"
+chown "$VMUSER" "$DISK"
+
+/usr/libexec/virtiofsd --socket-path="$RUN/images.sock" --socket-group="$VMUSER" \
+  --shared-dir="$STORE" --readonly --sandbox=namespace --cache=auto &
+VFS=$!
+for _ in $(seq 50); do [ -S "$RUN/images.sock" ] && break; sleep 0.1; done
+
+# 8 GiB ceiling; free page reporting returns what the guest frees, so five
+# ceilings can exceed the host's RAM (overcommit, backed by zram). The memfd
+# backend is shared because virtiofs requires it.
+setpriv --reuid="$VMUSER" --regid="$VMUSER" --init-groups -- \
+  /usr/libexec/qemu-kvm -enable-kvm -machine q35 -cpu host -smp 4 -m 8G \
+    -object memory-backend-memfd,id=mem,size=8G,share=on -numa node,memdev=mem \
+    -device virtio-balloon-pci,free-page-reporting=on \
+    -drive file="$DISK",if=virtio,discard=unmap \
+    -chardev socket,id=vfs,path="$RUN/images.sock" \
+    -device vhost-user-fs-pci,chardev=vfs,tag=images \
+    -netdev user,id=n0 -device virtio-net-pci,netdev=n0 \
+    -smbios type=11,path="$RUN/jit" \
+    -display none -serial file:"$RUN/console" -no-reboot
