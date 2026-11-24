@@ -20,7 +20,10 @@ setup() {
   printf 'GHA_ORG=crunchtools\nGHA_VM_IMAGE=quay.io/crunchtools/gha-runner@%s\n' "$OLD" > "$t/env"
   sed -e "s#^ENV=.*#ENV=$t/env#" -e "s#/root/.backups#$t/backups#g" "$src" > "$t/promote"
   chmod +x "$t/promote"
-  printf '#!/bin/bash\necho "$*" >> %q\n' "$t/calls" > "$t/bin/systemctl"
+  # is-active answers with $t/state (inactive unless a case sets it).
+  # shellcheck disable=SC2016 # the stub's own $-expressions run when it does
+  printf '#!/bin/bash\necho "$*" >> %q\n[ "$1" = is-active ] && { s=$(cat %q 2>/dev/null || echo inactive); echo "$s"; [ "$s" = active ]; }\nexit 0\n' \
+    "$t/calls" "$t/state" > "$t/bin/systemctl"
   chmod +x "$t/bin/systemctl"
   : > "$t/calls"
 }
@@ -33,6 +36,21 @@ grep -qx "GHA_ORG=crunchtools" "$t/env" || fail "other settings changed"
 ls "$t/backups"/gha-runner-vm.env.* >/dev/null 2>&1 || fail "no backup"
 grep -q "GHA_VM_IMAGE=quay.io/crunchtools/gha-runner@$OLD" "$t/backups"/gha-runner-vm.env.* || fail "backup is not the old file"
 grep -qx "start --no-block gha-runner-vm-disk" "$t/calls" || fail "disk rebuild not started"
+
+setup "a finished earlier build does not block"
+echo active > "$t/state"
+run "$NEW" || fail "exit non-zero"
+grep -qx "start --no-block gha-runner-vm-disk" "$t/calls" || fail "disk rebuild not started"
+
+for busy in activating deactivating; do
+  setup "refuses while the disk service is $busy"
+  echo "$busy" > "$t/state"
+  status=0; run "$NEW" || status=$?
+  [ "$status" -eq 75 ] || fail "exit $status, not 75"
+  grep -q "@$OLD" "$t/env" || fail "pin changed"
+  ls "$t/backups"/gha-runner-vm.env.* >/dev/null 2>&1 && fail "backup written"
+  grep -q "^start" "$t/calls" && fail "build started"
+done
 
 for bad in "" "sha256:abc" "sha256:$(printf 'G%.0s' {1..64})" "$NEW; rm -rf /" "quay.io/x@$NEW" "$NEW extra"; do
   setup "refuses '$bad'"
@@ -49,6 +67,6 @@ run && fail "accepted"
 setup "a missing env file"
 rm "$t/env"
 run "$NEW" && fail "accepted"
-[ -s "$t/calls" ] && fail "systemctl called"
+grep -q "^start" "$t/calls" && fail "build started"
 
 [ "$failures" -eq 0 ] && echo PASS || { echo "$failures failure(s)" >&2; exit 1; }

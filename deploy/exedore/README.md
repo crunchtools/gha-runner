@@ -42,9 +42,13 @@ GitHub-hosted runner: the VM's root podman (its socket is the job's
 
 To promote a VM image, run `/srv/gha-runner/bin/gha-runner-vm-promote sha256:<digest>`:
 it backs up the env file to `/root/.backups/`, sets `GHA_VM_IMAGE`, and starts
-`gha-runner-vm-disk`. Running VMs finish on the old disk. It takes a digest and
-nothing else, so it is the one command Josui may run here unattended. Land the
-same digest in `gha-runner-vm.env` by pull request.
+`gha-runner-vm-disk`. Running VMs finish on the old disk. While a build is
+already running it changes nothing and exits 75: that build read the old pin,
+so retry when it finishes. It takes a digest and nothing else, so it is the one
+command Josui may run here unattended. Land the same digest in
+`gha-runner-vm.env` by pull request. If the build fails, the pin stays on the
+new digest while `base.qcow2` stays on the old one, and every boot retries it;
+to roll back, promote the old digest (it is in the backup).
 
 ## Limits
 

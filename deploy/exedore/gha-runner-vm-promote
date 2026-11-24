@@ -12,9 +12,18 @@ ENV=/srv/gha-runner/config/gha-runner-vm.env
 REPO=quay.io/crunchtools/gha-runner
 [ $# -eq 1 ] && [[ $1 =~ ^sha256:[0-9a-f]{64}$ ]] \
   || { echo "usage: gha-runner-vm-promote sha256:<64 hex>" >&2; exit 2; }
+# The disk service is a oneshot that reads the pin once, at start. A start
+# while a build runs merges into that job and builds the old pin, so refuse
+# rather than report a promotion that will not happen until the next boot.
+state=$(systemctl is-active gha-runner-vm-disk || true)
+case $state in
+  activating|deactivating|reloading)
+    echo "gha-runner-vm-promote: gha-runner-vm-disk is $state (a build is running); nothing changed, retry when it finishes" >&2
+    exit 75 ;;
+esac
 install -d -m 0700 /root/.backups
 cp -p "$ENV" "/root/.backups/gha-runner-vm.env.$(date +%Y%m%d%H%M%S)"
 sed -i "s#^GHA_VM_IMAGE=.*#GHA_VM_IMAGE=$REPO@$1#" "$ENV"
 grep -qx "GHA_VM_IMAGE=$REPO@$1" "$ENV" || { echo "gha-runner-vm-promote: pin not written" >&2; exit 1; }
 systemctl start --no-block gha-runner-vm-disk
-echo "promoted $REPO@$1; base disk rebuilding (journalctl -u gha-runner-vm-disk)"
+echo "pinned $REPO@$1; base disk build queued, VMs use it once it finishes (journalctl -u gha-runner-vm-disk)"
