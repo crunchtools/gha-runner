@@ -1,0 +1,34 @@
+#!/bin/bash
+# gha-runner-vm-disk -- build the runner VMs' base disk from the pinned VM
+# image (RT #1664). Installed at /srv/gha-runner/bin/gha-runner-vm-disk; run as
+# root by gha-runner-vm-disk.service, at boot and when the pin changes.
+#
+# The disk is rebuilt only when GHA_VM_IMAGE names a digest it was not built
+# from. The new disk is renamed into place: a VM already running keeps the old
+# one open, and the next VM starts on the new one.
+set -euo pipefail
+# systemd cannot read an EnvironmentFile under /srv (var_t), so source it here.
+set -a; . /srv/gha-runner/config/gha-runner-vm.env; set +a
+IMAGE=${GHA_VM_IMAGE:?}
+BIB=${GHA_VM_BIB:?}
+DIR=/var/mnt/onsite/gha-runner-cache/vm
+[[ $IMAGE =~ @sha256:[0-9a-f]{64}$ ]] || { echo "gha-runner-vm-disk: $IMAGE is not pinned by digest" >&2; exit 2; }
+[ "$(cat "$DIR/base.image" 2>/dev/null)" = "$IMAGE" ] && { echo "base disk is current: $IMAGE"; exit 0; }
+
+install -d -m 0755 "$DIR"
+work=$(mktemp -d "$DIR/build.XXXXXX")
+trap 'rm -rf "$work"' EXIT
+printf '[customizations.disk]\nminsize = "40 GiB"\n' > "$work/config.toml"
+install -d "$work/tmp"
+
+podman pull -q "$IMAGE" >/dev/null
+podman run --rm --privileged --pull=missing --security-opt label=type:unconfined_t \
+  -v /var/lib/containers/storage:/var/lib/containers/storage \
+  -v "$work/config.toml":/config.toml:ro -v "$work":/output -v "$work/tmp":/var/tmp \
+  "$BIB" --type qcow2 --rootfs xfs --use-librepo=true "$IMAGE"
+
+chmod 0644 "$work/qcow2/disk.qcow2"
+mv "$work/qcow2/disk.qcow2" "$DIR/base.qcow2"
+echo "$IMAGE" > "$DIR/base.image"
+podman rmi "$IMAGE" >/dev/null 2>&1 || true
+echo "base disk built from $IMAGE"

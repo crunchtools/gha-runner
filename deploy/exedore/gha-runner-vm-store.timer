@@ -1,0 +1,11 @@
+# Hourly, and shortly after boot (RT #1664).
+[Unit]
+Description=Refresh the GitHub runner VMs' shared image store hourly
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1h
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

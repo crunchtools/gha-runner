@@ -20,6 +20,29 @@ One rootless user per instance (`ghrunner-cachedN` uid 2100+N,
 `ghrunner-uncachedN` uid 2110+N), each with its own subuid range and its own
 AppRole, so an escape from one instance reaches neither another's cache nor its key.
 
+## Runner VMs (RT #1664)
+
+Replaces the container runners above: five identical slots,
+`gha-runner@1..5` (VM hostnames `gha-runner1..5`, GitHub names `gha-runnerN-<timestamp>`), each running one job in a fresh RHEL bootc VM and
+registering with both labels, so `crunchtools-cached` and
+`crunchtools-uncached` route to the same pool. Two levels, as on a
+GitHub-hosted runner: the VM's root podman (its socket is the job's
+`/var/run/docker.sock`), then the job container, which may nest rootless podman.
+
+| Piece | Where |
+|---|---|
+| Units | `gha-runner@.service`, `gha-runner-vm-disk.service`, `gha-runner-vm-store.{service,timer}` |
+| Scripts | `/srv/gha-runner/bin/gha-runner-vm{,-mint,-disk,-store}` |
+| Env (no secrets) | `/srv/gha-runner/config/gha-runner-vm.env`: labels and the VM image pin |
+| Users | `/etc/sysusers.d/gha-runner-vm.conf`: `ghvmN` uid 2150+N, in `kvm`, inside the egress fence |
+| Base disk | `/var/mnt/onsite/gha-runner-cache/vm/base.qcow2`, built by bootc-image-builder from `GHA_VM_IMAGE`; each job gets a qcow2 overlay, deleted after |
+| Image store | `/var/mnt/onsite/gha-runner-cache/vm-images`, rootful, from `shared-images.list`; virtiofs tag `images`, read-only, an additional image store in the VM |
+| Memory | 8 GiB ceiling per VM, free page reporting, zram swap (`/etc/systemd/zram-generator.conf`); KSM stays off |
+| App key | `srv-secrets@gha-runner-uncached1`; the VM gets a one-runner JIT config as the `gha.jitconfig` SMBIOS credential, never the key |
+
+To promote a VM image, set `GHA_VM_IMAGE` to the new digest, then
+`systemctl start gha-runner-vm-disk`; running VMs finish on the old disk.
+
 ## Limits
 
 - Slice: `CPUQuota=1600%`, `MemoryHigh=22G`, `MemoryMax=24G`; `gha.slice` has

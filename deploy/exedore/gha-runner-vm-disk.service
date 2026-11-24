@@ -1,0 +1,18 @@
+# Builds the runner VMs' base disk from the pinned VM image (RT #1664); a
+# no-op when the disk already matches the pin. Re-run it after changing
+# GHA_VM_IMAGE in gha-runner-vm.env.
+[Unit]
+Description=Build the GitHub runner VMs' base disk
+Documentation=https://github.com/crunchtools/gha-runner/blob/main/deploy/exedore/README.md
+RequiresMountsFor=/var/mnt/onsite/gha-runner-cache
+After=network-online.target
+Wants=network-online.target
+Before=gha-runner@1.service gha-runner@2.service gha-runner@3.service gha-runner@4.service gha-runner@5.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bash /srv/gha-runner/bin/gha-runner-vm-disk
+TimeoutStartSec=30min
+
+[Install]
+WantedBy=multi-user.target

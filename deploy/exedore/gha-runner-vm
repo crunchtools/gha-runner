@@ -1,0 +1,79 @@
+#!/bin/bash
+# gha-runner-vm N -- run ONE job in a fresh VM, then exit; systemd restarts it
+# for the next (RT #1664). Installed at /srv/gha-runner/bin/gha-runner-vm; run
+# as root by gha-runner@N.service.
+#
+# Two levels, like a GitHub-hosted runner: the VM's own engine, then the job
+# container, which may nest rootless podman. The VM is a throwaway overlay on
+# the base disk, deleted on the way in and out, so no job sees another's state.
+#
+# qemu runs as uid 2150+N (ghvmN), inside the egress fence's uid range, so the
+# VM's traffic is fenced exactly as the container runners' was. virtiofsd runs
+# as root because the shared store holds root-only files; it serves the store
+# read-only.
+#
+# A host without qemu (one not yet upgraded to rhel10-bootc-server 1.7.0) runs
+# virtiofsd and qemu from GHA_VM_QEMU_IMAGE instead: a privileged container on
+# the host's network, so the uid the fence matches is still the slot's.
+set -euo pipefail
+CACHE=/var/mnt/onsite/gha-runner-cache
+
+# launch N -- virtiofsd, then qemu as the slot's uid; on the host or in the
+# qemu container (gha-runner-vm --launch N).
+launch() {
+  local n=$1 run=/run/gha-runner-vm/$1 uid=$((2150 + $1))
+  /usr/libexec/virtiofsd --socket-path="$run/images.sock" --socket-group="ghvm$n" \
+    --shared-dir="$CACHE/vm-images" --readonly --sandbox=namespace --cache=auto &
+  VFS=$!
+  trap 'kill "$VFS" 2>/dev/null' EXIT
+  for _ in $(seq 50); do [ -S "$run/images.sock" ] && break; sleep 0.1; done
+  # 8 GiB ceiling; free page reporting returns what the guest frees, so five
+  # ceilings can exceed the host's RAM (overcommit, backed by zram). The memfd
+  # backend is shared because virtiofs requires it.
+  setpriv --reuid="$uid" --regid="$uid" --groups=36 -- \
+    /usr/libexec/qemu-kvm -enable-kvm -machine q35 -cpu host -smp 4 -m 8G \
+      -object memory-backend-memfd,id=mem,size=8G,share=on -numa node,memdev=mem \
+      -device virtio-balloon-pci,free-page-reporting=on \
+      -drive file="$CACHE/vm/run$n.qcow2",if=virtio,discard=unmap \
+      -chardev socket,id=vfs,path="$run/images.sock" \
+      -device vhost-user-fs-pci,chardev=vfs,tag=images \
+      -netdev user,id=n0 -device virtio-net-pci,netdev=n0 \
+      -smbios type=11,path="$run/jit" \
+      -smbios type=11,path="$run/hostname" \
+      -display none -serial file:"$run/console" -no-reboot
+}
+if [ "${1:-}" = --launch ]; then launch "${2:?}"; exit; fi
+
+N=${1:?usage: gha-runner-vm N}
+# systemd cannot read an EnvironmentFile under /srv (var_t), so source it here.
+set -a; . /srv/gha-runner/config/gha-runner-vm.env; set +a
+BASE=$CACHE/vm/base.qcow2
+RUN=/run/gha-runner-vm/$N
+DISK=$CACHE/vm/run$N.qcow2
+VMUID=$((2150 + N))
+NAME=gha-runner$N-$(date +%s)
+
+[ -r "$BASE" ] || { echo "gha-runner-vm: no base disk at $BASE (run gha-runner-vm-disk)" >&2; exit 2; }
+rm -rf "$RUN" "$DISK"
+install -d -m 0770 -o root -g "$VMUID" "$RUN"
+trap 'rm -rf "$RUN" "$DISK"' EXIT
+
+umask 077
+printf 'io.systemd.credential:gha.jitconfig=%s' "$(bash /srv/gha-runner/bin/gha-runner-vm-mint "$NAME")" > "$RUN/jit"
+chgrp "$VMUID" "$RUN/jit"; chmod 0640 "$RUN/jit"
+printf 'io.systemd.credential:system.hostname=gha-runner%s' "$N" > "$RUN/hostname"
+chgrp "$VMUID" "$RUN/hostname"; chmod 0640 "$RUN/hostname"
+
+if [ -x /usr/libexec/qemu-kvm ]; then
+  qemu-img create -q -f qcow2 -b "$BASE" -F qcow2 "$DISK"
+  chown "$VMUID" "$DISK"
+  launch "$N"
+else
+  q() { podman run --rm --privileged --network host --security-opt label=disable \
+          -v "$CACHE:$CACHE" -v "$RUN:$RUN" -v /srv/gha-runner/bin:/srv/gha-runner/bin:ro \
+          "$@"; }
+  q --entrypoint qemu-img "${GHA_VM_QEMU_IMAGE:?}" create -q -f qcow2 -b "$BASE" -F qcow2 "$DISK"
+  chown "$VMUID" "$DISK"
+  q --name "gha-runner-vm-$N" --replace --entrypoint /usr/bin/bash \
+    "$GHA_VM_QEMU_IMAGE" /srv/gha-runner/bin/gha-runner-vm --launch "$N"
+fi

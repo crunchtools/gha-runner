@@ -1,0 +1,13 @@
+# Installed at /etc/sysusers.d/gha-runner-vm.conf on exedore (RT #1664).
+# One user per VM slot, inside the egress fence's uid range (2100-2199), in
+# the kvm group for /dev/kvm.
+u ghvm1 2151 "GitHub runner VM slot 1" /var/empty /usr/sbin/nologin
+u ghvm2 2152 "GitHub runner VM slot 2" /var/empty /usr/sbin/nologin
+u ghvm3 2153 "GitHub runner VM slot 3" /var/empty /usr/sbin/nologin
+u ghvm4 2154 "GitHub runner VM slot 4" /var/empty /usr/sbin/nologin
+u ghvm5 2155 "GitHub runner VM slot 5" /var/empty /usr/sbin/nologin
+m ghvm1 kvm
+m ghvm2 kvm
+m ghvm3 kvm
+m ghvm4 kvm
+m ghvm5 kvm

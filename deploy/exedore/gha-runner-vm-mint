@@ -1,0 +1,34 @@
+#!/bin/bash
+# gha-runner-vm-mint NAME -- print a JIT runner config for one disposable VM
+# (RT #1664). Installed at /srv/gha-runner/bin/gha-runner-vm-mint; run as root
+# by gha-runner-vm, which hands the result to the VM as a systemd credential.
+#
+# A JIT config registers exactly one runner, with its name, group and labels
+# fixed by this call: unlike a registration token it cannot enroll anything
+# else if it leaks. Same App and key as mint-registration-token.sh.
+set -euo pipefail
+NAME=${1:?usage: gha-runner-vm-mint NAME}
+ORG=${GHA_ORG:?} GROUP=${GHA_RUNNER_GROUP:?} APP_ID=${GHA_APP_ID:?}
+LABELS=${GHA_VM_LABELS:?}
+KEY=${GHA_APP_KEY_FILE:?}
+API=https://api.github.com
+[ -r "$KEY" ] || { echo "CANNOT MINT: app key not readable" >&2; exit 2; }
+
+b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+now=$(date +%s)
+head=$(printf '%s' '{"alg":"RS256","typ":"JWT"}' | b64url)
+body=$(printf '{"iat":%d,"exp":%d,"iss":"%s"}' "$((now - 60))" "$((now + 540))" "$APP_ID" | b64url)
+jwt="$head.$body.$(printf '%s' "$head.$body" | openssl dgst -sha256 -sign "$KEY" | b64url)"
+
+gh() { curl -sS -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "$@"; }
+install_id=$(gh -H "Authorization: Bearer $jwt" "$API/orgs/$ORG/installation" | jq -r '.id // empty')
+[ -n "$install_id" ] || { echo "CANNOT MINT: app is not installed on $ORG" >&2; exit 2; }
+tok=$(gh -X POST -H "Authorization: Bearer $jwt" "$API/app/installations/$install_id/access_tokens" | jq -r '.token // empty')
+[ -n "$tok" ] || { echo "CANNOT MINT: no installation token" >&2; exit 2; }
+group_id=$(gh -H "Authorization: token $tok" "$API/orgs/$ORG/actions/runner-groups?per_page=100" \
+  | jq -r --arg g "$GROUP" '.runner_groups[] | select(.name == $g) | .id')
+[ -n "$group_id" ] || { echo "CANNOT MINT: no runner group $GROUP" >&2; exit 2; }
+jq -n --arg n "$NAME" --argjson g "$group_id" --arg l "$LABELS" \
+    '{name: $n, runner_group_id: $g, labels: ($l | split(",")), work_folder: "_work"}' \
+  | gh -X POST -H "Authorization: token $tok" --data-binary @- "$API/orgs/$ORG/actions/runners/generate-jitconfig" \
+  | jq -er '.encoded_jit_config' || { echo "CANNOT MINT: no JIT config for $NAME" >&2; exit 2; }

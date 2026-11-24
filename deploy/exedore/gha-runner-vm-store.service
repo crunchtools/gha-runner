@@ -1,0 +1,13 @@
+# Refreshes the runner VMs' read-only image store (RT #1664); see
+# gha-runner-vm-store. Pulls only the public images in shared-images.list.
+[Unit]
+Description=Refresh the GitHub runner VMs' shared image store
+Documentation=https://github.com/crunchtools/gha-runner/blob/main/deploy/exedore/README.md
+RequiresMountsFor=/var/mnt/onsite/gha-runner-cache
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bash /srv/gha-runner/bin/gha-runner-vm-store
+TimeoutStartSec=30min

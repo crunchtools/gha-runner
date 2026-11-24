@@ -12,3 +12,7 @@ quay.io/hummingbird/python:3.14-builder
 quay.io/hummingbird/python:3.14
 quay.io/hummingbird/python:3.14-fips-builder
 quay.io/hummingbird/python:3.14-fips
+# The fleet CI file's bootstrap, by the digest the constitution lists, and the
+# sdlc release line it verifies and runs (RT #1664).
+quay.io/crunchtools/sdlc-bootstrap@sha256:5f25b7968ff9f14e0fa363ea3c25e0df4f6159abf43549653fff74eb674de060
+quay.io/crunchtools/sdlc:0
