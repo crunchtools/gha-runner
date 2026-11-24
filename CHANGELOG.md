@@ -20,6 +20,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **Jobs get a `HOME`.** `gha-runner.service` runs as root with no `User=`, so
+  systemd set no `HOME`, and `sdlc`'s launcher (`set -u`) died on
+  `HOME: unbound variable`. The unit sets `HOME=/root`; the smoke test checks it.
 - **The VM image ships the tools jobs ran on**: git, the gh CLI (2.103.0,
   sha256-verified), skopeo, openssl, python3-pip and the browser libraries the
   container runner had. Without git, `actions/checkout` fell back to a REST
