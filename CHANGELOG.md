@@ -18,9 +18,6 @@ All notable changes to this project are documented here. The format follows
 - Exedore runs two runner VMs at 16 GiB each (`GHA_VM_MEMORY`), GitHub's
   standard runner size, instead of five at 8 GiB; the slice allows 26G/30G.
   Public repos run on GitHub's runners, so these serve private repos.
-
-### Changed
-
 - **Breaking: the runner is a RHEL bootc VM image** (RT #1664). The
   Containerfile now builds `quay.io/crunchtools/gha-runner` on
   `rhel10/rhel-bootc` (pinned by digest): podman, the docker CLI (pinned by
