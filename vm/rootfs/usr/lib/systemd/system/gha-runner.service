@@ -7,6 +7,9 @@ After=network-online.target podman.socket var-lib-shared\x2dimages.mount
 Type=simple
 ImportCredential=gha.*
 Environment=RUNNER_ALLOW_RUNASROOT=1
+# systemd sets no HOME for a root service without User=; jobs (sdlc's launcher
+# under set -u) read it, and the container runner always had one.
+Environment=HOME=/root
 Environment=DOCKER_HOST=unix:///run/podman/podman.sock
 ExecStart=/usr/libexec/runner-start.sh
 # Done or failed, the VM is spent: the host boots a fresh overlay.
