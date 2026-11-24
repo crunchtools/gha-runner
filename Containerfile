@@ -32,14 +32,22 @@ subscription-manager register \
     --org="$(cat /run/secrets/org_id)"
 trap 'subscription-manager unregister || true; subscription-manager clean || true' EXIT
 dnf update -y
-dnf install -y --nodocs \
+# The container runner (1.1.5) shipped these and jobs depend on them:
+# actions/checkout clones with git (without it, a REST tarball with no .git,
+# and sdlc refuses with exit 2), and the dependency audit shells out to gh.
+dnf install -y --nodocs --setopt=install_weak_deps=0 \
     podman \
     jq \
     libicu \
     krb5-libs \
     openssl-libs \
     zlib \
-    tar
+    tar \
+    git gzip findutils which procps-ng hostname \
+    openssl skopeo python3-pip \
+    nss nspr atk at-spi2-atk cups-libs dbus-libs libdrm mesa-libgbm \
+    pango cairo alsa-lib expat libX11 libxcb libXcomposite libXdamage \
+    libXext libXfixes libXrandr libxkbcommon liberation-sans-fonts
 dnf clean all
 rm -rf /var/cache/dnf /var/cache/yum
 RUNEOF
@@ -51,6 +59,15 @@ COPY --from=docker.io/library/docker@sha256:34507eb5069d8be82c95dd3b6987d4250fd5
 
 # The runner lives read-only in /usr; runner-vm-start.sh copies it to /var for
 # the one job, since the runner writes into its own directory.
+ARG GH_VERSION=2.103.0
+ARG GH_SHA256=fdd768eb70f6409f80fcfa9f3a1c0adf0fc98d827ab3ce0bed2ac22762c5d786
+RUN set -eu; \
+    curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 -o /tmp/gh.tar.gz \
+      "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.tar.gz"; \
+    echo "${GH_SHA256}  /tmp/gh.tar.gz" | sha256sum -c -; \
+    tar xzf /tmp/gh.tar.gz -C /tmp "gh_${GH_VERSION}_linux_amd64/bin/gh"; \
+    install -m 0755 "/tmp/gh_${GH_VERSION}_linux_amd64/bin/gh" /usr/bin/gh; \
+    rm -rf /tmp/gh.tar.gz "/tmp/gh_${GH_VERSION}_linux_amd64"
 ARG RUNNER_VERSION=2.338.2
 ARG RUNNER_SHA256=baebf204307bac6193480852732f0aba2ae97b6c5597c244f4d5558390147c40
 RUN set -eu; \
