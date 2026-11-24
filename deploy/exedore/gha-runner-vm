@@ -31,8 +31,8 @@ launch() {
   # ceilings can exceed the host's RAM (overcommit, backed by zram). The memfd
   # backend is shared because virtiofs requires it.
   setpriv --reuid="$uid" --regid="$uid" --groups=36 -- \
-    /usr/libexec/qemu-kvm -enable-kvm -machine q35 -cpu host -smp 4 -m 8G \
-      -object memory-backend-memfd,id=mem,size=8G,share=on -numa node,memdev=mem \
+    /usr/libexec/qemu-kvm -enable-kvm -machine q35 -cpu host -smp 4 -m "${GHA_VM_MEMORY:-8G}" \
+      -object memory-backend-memfd,id=mem,size="${GHA_VM_MEMORY:-8G}",share=on -numa node,memdev=mem \
       -device virtio-balloon-pci,free-page-reporting=on \
       -drive file="$CACHE/vm/run$n.qcow2",if=virtio,discard=unmap \
       -chardev socket,id=vfs,path="$run/images.sock" \
