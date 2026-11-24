@@ -1,4 +1,5 @@
 [tool.sdlc]
+repo-kinds = ["container-image"]
 # The image is a RHEL bootc VM (Containerfile). sdlc has no checks for the
 # bootc stack yet, and a stack it cannot check makes every run exit 2; the
 # Container workflow builds, lints and smoke-tests it instead.
