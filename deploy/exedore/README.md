@@ -22,8 +22,8 @@ AppRole, so an escape from one instance reaches neither another's cache nor its 
 
 ## Runner VMs (RT #1664)
 
-Replaces the container runners above: five identical slots,
-`gha-runner@1..5` (VM hostnames `gha-runner1..5`, GitHub names `gha-runnerN-<timestamp>`), each running one job in a fresh RHEL bootc VM and
+Replaces the container runners above: two identical slots,
+`gha-runner@1..2` (VM hostnames `gha-runner1..2`, GitHub names `gha-runnerN-<timestamp>`), each running one job in a fresh RHEL bootc VM and
 registering with both labels, so `crunchtools-cached` and
 `crunchtools-uncached` route to the same pool. Two levels, as on a
 GitHub-hosted runner: the VM's root podman (its socket is the job's
@@ -37,7 +37,7 @@ GitHub-hosted runner: the VM's root podman (its socket is the job's
 | Users | `/etc/sysusers.d/gha-runner-vm.conf`: `ghvmN` uid 2150+N, in `kvm`, inside the egress fence |
 | Base disk | `/var/mnt/onsite/gha-runner-cache/vm/base.qcow2`, built by bootc-image-builder from `GHA_VM_IMAGE`; each job gets a qcow2 overlay, deleted after |
 | Image store | `/var/mnt/onsite/gha-runner-cache/vm-images`, rootful, from `shared-images.list`; virtiofs tag `images`, read-only, an additional image store in the VM |
-| Memory | 8 GiB ceiling per VM, free page reporting, zram swap (`/etc/systemd/zram-generator.conf`); KSM stays off |
+| Memory | `GHA_VM_MEMORY` per VM (16 GiB, GitHub's standard runner size), free page reporting, zram swap (`/etc/systemd/zram-generator.conf`); KSM stays off |
 | App key | `srv-secrets@gha-runner-uncached1`; the VM gets a one-runner JIT config as the `gha.jitconfig` SMBIOS credential, never the key |
 
 To promote a VM image, set `GHA_VM_IMAGE` to the new digest, then
@@ -45,11 +45,15 @@ To promote a VM image, set `GHA_VM_IMAGE` to the new digest, then
 
 ## Limits
 
-- Slice: `CPUQuota=1600%`, `MemoryHigh=22G`, `MemoryMax=24G`; `gha.slice` has
+- Slice: `CPUQuota=1600%`, `MemoryHigh=26G`, `MemoryMax=30G`; `gha.slice` has
   `CPUWeight=50`/`IOWeight=50` against the seats' `system.slice` at 100. That is
   the parent where the weight actually competes. Check it:
   `cat /sys/fs/cgroup/gha.slice/gha-runner.slice/{cpu.max,memory.max} /sys/fs/cgroup/gha.slice/cpu.weight`
-  should print `1600000 100000`, `25769803776` and `50`.
+  should print `1600000 100000`, `32212254720` and `50`.
+- Two 16 GiB VMs overcommit Exedore's 28 GiB on purpose: a VM hands back
+  memory it is not using, and zram absorbs the rest. Public repos run on
+  GitHub's runners (the runner variables are private-only), so these two
+  slots serve private repos.
 - No per-job caps (no `SDLC_CPUS`/`SDLC_MEMORY`), by decision: the slice is the
   only limit. Under saturation the OOM killer acts inside the slice and kills a
   job, never a seat.
