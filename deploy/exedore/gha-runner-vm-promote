@@ -7,23 +7,48 @@
 # and nothing else: it is the one command an agent may run here without a
 # person, so it can only swap one pinned digest for another. Land the same
 # digest in deploy/exedore/gha-runner-vm.env by pull request.
+#
+# Exit 75 means nothing changed and it is safe to retry later: another promote
+# holds the lock, or a disk build is running.
 set -euo pipefail
 ENV=/srv/gha-runner/config/gha-runner-vm.env
 REPO=quay.io/crunchtools/gha-runner
+UNIT=gha-runner-vm-disk
+LOCK=/run/lock/gha-runner-vm-promote.lock
 [ $# -eq 1 ] && [[ $1 =~ ^sha256:[0-9a-f]{64}$ ]] \
   || { echo "usage: gha-runner-vm-promote sha256:<64 hex>" >&2; exit 2; }
+
+# One promote at a time, from the state check until the build has read the pin.
+exec 9>"$LOCK"
+flock -n 9 || { echo "gha-runner-vm-promote: another promote is running; nothing changed, retry" >&2; exit 75; }
+
+# is-active exits non-zero for any state but active, so judge what it prints.
+state=$(systemctl is-active "$UNIT") || true
+[ -n "$state" ] || { echo "gha-runner-vm-promote: systemctl is-active $UNIT said nothing; nothing changed" >&2; exit 1; }
 # The disk service is a oneshot that reads the pin once, at start. A start
 # while a build runs merges into that job and builds the old pin, so refuse
 # rather than report a promotion that will not happen until the next boot.
-state=$(systemctl is-active gha-runner-vm-disk || true)
 case $state in
   activating|deactivating|reloading)
-    echo "gha-runner-vm-promote: gha-runner-vm-disk is $state (a build is running); nothing changed, retry when it finishes" >&2
+    echo "gha-runner-vm-promote: $UNIT is $state (a build is running); nothing changed, retry when it finishes" >&2
     exit 75 ;;
 esac
+
 install -d -m 0700 /root/.backups
-cp -p "$ENV" "/root/.backups/gha-runner-vm.env.$(date +%Y%m%d%H%M%S)"
+backup=$(mktemp "/root/.backups/gha-runner-vm.env.$(date +%Y%m%d%H%M%S).XXXXXX")
+cp -p "$ENV" "$backup"
 sed -i "s#^GHA_VM_IMAGE=.*#GHA_VM_IMAGE=$REPO@$1#" "$ENV"
 grep -qx "GHA_VM_IMAGE=$REPO@$1" "$ENV" || { echo "gha-runner-vm-promote: pin not written" >&2; exit 1; }
-systemctl start --no-block gha-runner-vm-disk
-echo "pinned $REPO@$1; base disk build queued, VMs use it once it finishes (journalctl -u gha-runner-vm-disk)"
+
+before=$(systemctl show -P ExecMainStartTimestampMonotonic "$UNIT")
+systemctl start --no-block "$UNIT"
+# Keep the lock until systemd has started the build (it sources the pin first
+# thing), so a promote right behind this one sees it running and refuses.
+for _ in $(seq 30); do
+  if [ "$(systemctl show -P ExecMainStartTimestampMonotonic "$UNIT")" != "$before" ]; then
+    echo "promoted $REPO@$1; base disk build started (journalctl -u $UNIT), backup $backup"
+    exit 0
+  fi
+  sleep 1
+done
+echo "pinned $REPO@$1; base disk build queued, not started yet (journalctl -u $UNIT), backup $backup"

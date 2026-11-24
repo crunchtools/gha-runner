@@ -18,12 +18,20 @@ setup() {
   t=$(mktemp -d -p "$root")
   mkdir -p "$t/bin" "$t/backups"
   printf 'GHA_ORG=crunchtools\nGHA_VM_IMAGE=quay.io/crunchtools/gha-runner@%s\n' "$OLD" > "$t/env"
-  sed -e "s#^ENV=.*#ENV=$t/env#" -e "s#/root/.backups#$t/backups#g" "$src" > "$t/promote"
+  sed -e "s#^ENV=.*#ENV=$t/env#" -e "s#^LOCK=.*#LOCK=$t/lock#" \
+    -e "s#/root/.backups#$t/backups#g" "$src" > "$t/promote"
   chmod +x "$t/promote"
-  # is-active answers with $t/state (inactive unless a case sets it).
-  # shellcheck disable=SC2016 # the stub's own $-expressions run when it does
-  printf '#!/bin/bash\necho "$*" >> %q\n[ "$1" = is-active ] && { s=$(cat %q 2>/dev/null || echo inactive); echo "$s"; [ "$s" = active ]; }\nexit 0\n' \
-    "$t/calls" "$t/state" > "$t/bin/systemctl"
+  # systemctl: is-active answers with $t/state (inactive unless a case sets
+  # it), `start` bumps the ExecMainStart timestamp that `show` reports.
+  cat > "$t/bin/systemctl" <<STUB
+#!/bin/bash
+echo "\$*" >> "$t/calls"
+case \$1 in
+  is-active) s=\$(cat "$t/state" 2>/dev/null || echo inactive); echo "\$s"; [ "\$s" = active ] ;;
+  show) cat "$t/started" 2>/dev/null || echo 0 ;;
+  start) echo \$((\$(cat "$t/started" 2>/dev/null || echo 0) + 1)) > "$t/started" ;;
+esac
+STUB
   chmod +x "$t/bin/systemctl"
   : > "$t/calls"
 }
@@ -42,7 +50,7 @@ echo active > "$t/state"
 run "$NEW" || fail "exit non-zero"
 grep -qx "start --no-block gha-runner-vm-disk" "$t/calls" || fail "disk rebuild not started"
 
-for busy in activating deactivating; do
+for busy in activating deactivating reloading; do
   setup "refuses while the disk service is $busy"
   echo "$busy" > "$t/state"
   status=0; run "$NEW" || status=$?
@@ -59,6 +67,27 @@ for bad in "" "sha256:abc" "sha256:$(printf 'G%.0s' {1..64})" "$NEW; rm -rf /" "
   grep -q "@$OLD" "$t/env" || fail "pin changed"
   [ -s "$t/calls" ] && fail "systemctl called"
 done
+
+setup "systemctl is-active says nothing"
+printf '#!/bin/bash\nexit 1\n' > "$t/bin/systemctl"
+run "$NEW" && fail "accepted"
+grep -q "@$OLD" "$t/env" || fail "pin changed"
+
+setup "refuses while another promote holds the lock"
+status=0
+{ flock 9; run "$NEW" || status=$?; } 9>"$t/lock"
+[ "$status" -eq 75 ] || fail "exit $status, not 75"
+grep -q "@$OLD" "$t/env" || fail "pin changed"
+grep -q "^start" "$t/calls" && fail "build started"
+
+setup "two promotes in one second keep both backups"
+run "$NEW" || fail "first exit non-zero"
+run "$OLD" || fail "second exit non-zero"
+[ "$(find "$t/backups" -name 'gha-runner-vm.env.*' | wc -l)" -eq 2 ] || fail "a backup was overwritten"
+
+setup "the message says the build started"
+out=$(PATH="$t/bin:$PATH" "$t/promote" "$NEW" 2>&1) || fail "exit non-zero"
+[[ $out == "promoted "*"build started"* ]] || fail "said: $out"
 
 setup "no arguments"
 run && fail "accepted"

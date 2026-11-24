@@ -35,8 +35,10 @@ All notable changes to this project are documented here. The format follows
 
 - `gha-runner-vm-promote sha256:<digest>`: the one command that swaps the VM
   image pin and starts the disk rebuild, digest-only so it can run unattended.
-  While a disk build is already running it changes nothing and exits 75, since
-  that oneshot read the old pin and a second start would merge into it.
+  While a disk build is already running, or another promote holds its lock,
+  it changes nothing and exits 75: that oneshot read the old pin, and a second
+  start would merge into it. It holds the lock until systemd has started the
+  build, and each backup gets a unique name.
 
 ### Fixed
 
