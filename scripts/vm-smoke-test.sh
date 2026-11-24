@@ -25,6 +25,8 @@ run_in_image '/usr/lib/actions-runner/bin/Runner.Listener --version' | grep -q '
 echo "== the docker CLI runs"
 run_in_image 'docker --version'
 
+echo "== the tools jobs run without installing: git (checkout), gh, skopeo, python3"
+run_in_image 'git --version && gh --version && skopeo --version && python3 --version'
 echo "== the boot units are enabled"
 run_in_image "systemctl is-enabled gha-runner.service podman.socket 'var-lib-shared\\x2dimages.mount'"
 

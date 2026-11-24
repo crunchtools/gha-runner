@@ -18,6 +18,16 @@ All notable changes to this project are documented here. The format follows
   `container.yml` builds it with RHSM, gates it (`bootc container lint` and
   `scripts/vm-smoke-test.sh`) and signs it.
 
+### Fixed
+
+- **The VM image ships the tools jobs ran on**: git, the gh CLI (2.103.0,
+  sha256-verified), skopeo, openssl, python3-pip and the browser libraries the
+  container runner had. Without git, `actions/checkout` fell back to a REST
+  tarball with no `.git` and `sdlc ci` refused with exit 2 ("git is not on
+  PATH"); without gh, the dependency audit died on `FileNotFoundError: 'gh'`.
+  Every cached-runner PR in the org failed both. The smoke test now checks
+  them. shellcheck is EPEL-only on RHEL and stays out.
+
 ### Removed
 
 - The rootless Fedora container image and its scripts (`entrypoint.sh`,
