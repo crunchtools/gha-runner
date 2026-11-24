@@ -32,7 +32,7 @@ jobs:
       image: quay.io/crunchtools/gha-runner
       format: oci
       build-args: |
-        UPGRADE_STAMP=${{ github.run_id }}
+        UPGRADE_STAMP=${{ github.run_id }}-${{ github.run_attempt }}
       free-disk: true
       redhat-registry: true
       rhsm: true

@@ -36,6 +36,9 @@ echo "== Red Hat registries require sigstore signatures with Rekor"
 # retired Fedora image had to install it. Fail if either side drifts.
 run_in_image 'test ! -e /etc/containers/policy.json && jq -e '"'"'[.transports.docker["registry.redhat.io","registry.access.redhat.com"][0] | .type == "sigstoreSigned" and (.rekorPublicKeyPath | length > 0)] | all'"'"' /usr/share/containers/policy.json'
 
+echo "== job containers run unlabelled (the runner does not relabel the workspace)"
+run_in_image 'grep -qx "label = false" /etc/containers/containers.conf.d/50-gha-nolabel.conf'
+
 echo "== no credential, no runner"
 if run_in_image 'CREDENTIALS_DIRECTORY=$(mktemp -d) /usr/libexec/runner-start.sh' 2>/dev/null; then
   echo "runner-start.sh succeeded without a credential" >&2
