@@ -6,10 +6,11 @@
 # images the jobs pull are shared read-only from the host over virtiofs (tag
 # `images`); each VM's own storage stays native overlay on its disk.
 #
-# Not pinned by digest: registry.redhat.io needs a login to resolve one, and
-# this image wants RHEL's errata the way rhel10-bootc-server takes them, from
-# the floating tag on the weekly schedule, gated by `bootc container lint`.
-FROM registry.redhat.io/rhel10/rhel-bootc
+# Pinned by digest, like ../Containerfile: the runner executes repository code,
+# so "what changed under us" must never be a question. 10.3-1793862045, the
+# manifest list `latest` named on 2026-11-11 (catalog.redhat.com). The weekly
+# build still takes errata from `dnf update`.
+FROM registry.redhat.io/rhel10/rhel-bootc@sha256:47408136693bfe3aa58dad2a1f971c024fefd0802edf467a8de14de8e20bb910
 
 LABEL maintainer="crunchtools.com" \
       description="GitHub Actions runner VM: RHEL bootc, one ephemeral job per boot" \
@@ -44,7 +45,7 @@ RUNEOF
 COPY --from=docker.io/library/docker@sha256:34507eb5069d8be82c95dd3b6987d4250fd5fee49b82e2509b7d7a7030740d6d \
      /usr/local/bin/docker /usr/bin/docker
 
-# The runner lives read-only in /usr; runner-start.sh copies it to /var for
+# The runner lives read-only in /usr; runner-vm-start.sh copies it to /var for
 # the one job, since the runner writes into its own directory.
 ARG RUNNER_VERSION=2.338.2
 ARG RUNNER_SHA256=baebf204307bac6193480852732f0aba2ae97b6c5597c244f4d5558390147c40
@@ -56,6 +57,7 @@ RUN set -eu; \
     tar -xzf /tmp/runner.tgz -C /usr/lib/actions-runner; \
     rm -f /tmp/runner.tgz
 
-COPY rootfs/ /
+COPY vm/rootfs/ /
+COPY scripts/runner-vm-start.sh /usr/libexec/runner-start.sh
 RUN chmod 755 /usr/libexec/runner-start.sh \
  && systemctl enable podman.socket gha-runner.service 'var-lib-shared\x2dimages.mount'
