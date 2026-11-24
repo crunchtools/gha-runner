@@ -31,6 +31,11 @@ run_in_image "systemctl is-enabled gha-runner.service podman.socket 'var-lib-sha
 echo "== storage lists the shared image store"
 run_in_image 'grep -q "/var/lib/shared-images" /etc/containers/storage.conf'
 
+echo "== Red Hat registries require sigstore signatures with Rekor"
+# The base's own policy (/usr/share, no /etc override) enforces this; the
+# retired Fedora image had to install it. Fail if either side drifts.
+run_in_image 'test ! -e /etc/containers/policy.json && jq -e '"'"'[.transports.docker["registry.redhat.io","registry.access.redhat.com"][0] | .type == "sigstoreSigned" and (.rekorPublicKeyPath | length > 0)] | all'"'"' /usr/share/containers/policy.json'
+
 echo "== no credential, no runner"
 if run_in_image 'CREDENTIALS_DIRECTORY=$(mktemp -d) /usr/libexec/runner-start.sh' 2>/dev/null; then
   echo "runner-start.sh succeeded without a credential" >&2

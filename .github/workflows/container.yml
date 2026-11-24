@@ -31,6 +31,8 @@ jobs:
     with:
       image: quay.io/crunchtools/gha-runner
       format: oci
+      build-args: |
+        UPGRADE_STAMP=${{ github.run_id }}
       free-disk: true
       redhat-registry: true
       rhsm: true
