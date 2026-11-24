@@ -28,7 +28,7 @@ run_in_image 'docker --version'
 echo "== the tools jobs run without installing: git (checkout), gh, skopeo, python3"
 run_in_image 'git --version && gh --version && skopeo --version && python3 --version'
 echo "== the runner service gives jobs a HOME"
-run_in_image 'systemctl show gha-runner.service -p Environment | grep -q "HOME=/root"'
+run_in_image 'grep -qx "Environment=HOME=/root" /usr/lib/systemd/system/gha-runner.service'
 echo "== the boot units are enabled"
 run_in_image "systemctl is-enabled gha-runner.service podman.socket 'var-lib-shared\\x2dimages.mount'"
 
