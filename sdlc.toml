@@ -5,7 +5,7 @@ repo-kinds = ["container-image"]
 
 # The repo's own tests, which ran as three workflows before the fleet ci.yml.
 [tool.sdlc.ci]
-checks = ["deploy-units", "runner-prune", "images-warm", "grype-expiry"]
+checks = ["deploy-units", "runner-prune", "images-warm", "vm-promote", "grype-expiry"]
 # The Containerfile needs RHSM secrets that `sdlc ci` is not given. The image
 # job builds it with them and runs bootc-lint and container-scan on that build.
 skip = ["container-build", "bootc-lint", "container-scan"]
@@ -24,6 +24,11 @@ argv = ["bash", "scripts/gha-runner-prune-test.sh"]
 [tool.sdlc.ci.images-warm]
 kind = "command"
 argv = ["bash", "scripts/gha-images-warm-test.sh"]
+
+# gha-runner-vm-promote takes a digest and nothing else.
+[tool.sdlc.ci.vm-promote]
+kind = "command"
+argv = ["bash", "scripts/gha-runner-vm-promote-test.sh"]
 
 # No grype ignore past its EXPIRES date. PyYAML comes from PyPI, by hash.
 [tool.sdlc.ci.grype-expiry]
