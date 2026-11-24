@@ -1,0 +1,54 @@
+# The runner VM (vm/Containerfile): a RHEL bootc image Exedore turns into a
+# qcow2 and boots once per job (RT #1664). Built, gated and promoted by the
+# same reusable workflow as the container image, in its own Quay repository:
+# container-release owns the tags (gated-, sha-, main, latest, v*) and has no
+# prefix, so sharing quay.io/crunchtools/gha-runner would move the container
+# image's floating tags to a VM.
+#
+# Gated like rhel10-bootc-server: a plain OCI manifest, `bootc container lint`
+# against the pushed digest.
+
+name: Container (VM)
+
+on:
+  pull_request:
+    paths: ['vm/**', '.github/workflows/container-vm.yml']
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths: ['vm/**', '.github/workflows/container-vm.yml']
+  schedule:
+    - cron: "47 5 * * 1"   # weekly: RHEL errata, gated like any build
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  container:
+    uses: crunchtools/constitution/.github/workflows/container-release.yml@v1.51.0
+    permissions:
+      contents: read
+      issues: write   # the alert job files a failed schedule as an issue
+      pull-requests: read
+    with:
+      image: quay.io/crunchtools/gha-runner-vm
+      containerfile: vm/Containerfile
+      context: vm
+      format: oci
+      free-disk: true
+      redhat-registry: true
+      rhsm: true
+      boot: command
+      boot-command: |
+        podman run --rm "$IMAGE" bootc container lint
+      boot-timeout: 600
+      sign: true
+    secrets:
+      QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+      QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
+      REGISTRY_REDHAT_IO_USER: ${{ secrets.REGISTRY_REDHAT_IO_USER }}
+      REGISTRY_REDHAT_IO_PASSWORD: ${{ secrets.REGISTRY_REDHAT_IO_PASSWORD }}
+      RHSM_ACTIVATION_KEY: ${{ secrets.RHSM_ACTIVATION_KEY }}
+      RHSM_ORG_ID: ${{ secrets.RHSM_ORG_ID }}
+      COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+      COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
