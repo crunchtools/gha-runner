@@ -89,6 +89,16 @@ setup "the message says the build started"
 out=$(PATH="$t/bin:$PATH" "$t/promote" "$NEW" 2>&1) || fail "exit non-zero"
 [[ $out == "promoted "*"build started"* ]] || fail "said: $out"
 
+setup "a start still queued after 30 polls says so"
+# The job never starts: `start` leaves the timestamp alone, and sleep returns at once.
+sed -i 's#^  start) .*#  start) ;;#' "$t/bin/systemctl"
+printf '#!/bin/bash\necho "sleep $*" >> %q\n' "$t/calls" > "$t/bin/sleep"
+chmod +x "$t/bin/sleep"
+out=$(PATH="$t/bin:$PATH" "$t/promote" "$NEW" 2>&1) || fail "exit non-zero"
+[[ $out == "pinned "*"queued, not started yet"* ]] || fail "said: $out"
+[ "$(grep -c '^sleep ' "$t/calls")" -eq 30 ] || fail "did not poll 30 times"
+grep -qx "GHA_VM_IMAGE=quay.io/crunchtools/gha-runner@$NEW" "$t/env" || fail "pin not written"
+
 setup "no arguments"
 run && fail "accepted"
 [ -s "$t/calls" ] && fail "systemctl called"

@@ -51,4 +51,8 @@ for _ in $(seq 30); do
   fi
   sleep 1
 done
-echo "pinned $REPO@$1; base disk build queued, not started yet (journalctl -u $UNIT), backup $backup"
+# Still queued (at boot it waits for the network): the job reads the pin only
+# when it starts, so a later promote before then supersedes this one, which is
+# what a later promote is for. Holding the lock would let a stalled start block
+# every promote after it.
+echo "pinned $REPO@$1; base disk build queued, not started yet; a later promote before it starts supersedes this one (journalctl -u $UNIT), backup $backup"
