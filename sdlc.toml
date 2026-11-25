@@ -1,6 +1,44 @@
 [tool.sdlc]
 repo-kinds = ["container-image"]
-# The image is a RHEL bootc VM (Containerfile). sdlc has no checks for the
-# bootc stack yet, and a stack it cannot check makes every run exit 2; the
-# Container workflow builds, lints and smoke-tests it instead.
-skip-stacks = ["bootc"]
+# The image is a RHEL bootc VM (Containerfile), built with RHSM secrets only
+# the image job holds.
+
+# The repo's own tests, which ran as three workflows before the fleet ci.yml.
+[tool.sdlc.ci]
+checks = ["deploy-units", "runner-prune", "images-warm", "grype-expiry"]
+# The Containerfile needs RHSM secrets that `sdlc ci` is not given. The image
+# job builds it with them and runs bootc-lint and container-scan on that build.
+skip = ["container-build", "bootc-lint", "container-scan"]
+
+# Both runner units pin the image by digest.
+[tool.sdlc.ci.deploy-units]
+kind = "command"
+argv = ["bash", "scripts/deploy-units-test.sh"]
+
+# gha-runner-prune's keep list, age and failure branches.
+[tool.sdlc.ci.runner-prune]
+kind = "command"
+argv = ["bash", "scripts/gha-runner-prune-test.sh"]
+
+# gha-images-warm's prune, failure and permission branches.
+[tool.sdlc.ci.images-warm]
+kind = "command"
+argv = ["bash", "scripts/gha-images-warm-test.sh"]
+
+# No grype ignore past its EXPIRES date. PyYAML comes from PyPI, by hash.
+[tool.sdlc.ci.grype-expiry]
+kind = "command"
+image = "docker.io/library/python@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b"
+argv = ["bash", "scripts/grype-expiry-check.sh"]
+network = true
+
+[tool.sdlc.image]
+# Written by crunchtools/sdlc's scripts/convert_repo.py: moved from the workflows.
+image = "quay.io/crunchtools/gha-runner"
+format = "oci"
+free-disk = true
+redhat-registry = true
+rhsm = true
+boot = "command"
+boot-command = "bash scripts/vm-smoke-test.sh \"$IMAGE\""
+boot-timeout = 600
