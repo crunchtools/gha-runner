@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **CI is the fleet `ci.yml` (sdlc 0.15).** The old workflows are gone and
+  their checks live in `sdlc.toml`. A pull request's check holds no RHSM
+  secrets, so it skips the image's build, `bootc-lint` and scan; the image job
+  runs all three at merge, then signs and promotes. `scripts/vm-smoke-test.sh`
+  is `boot-command`, which sdlc does not run until crunchtools/sdlc#118: until
+  then its assertions are not a gate. The `UPGRADE_STAMP` build argument is
+  gone; the weekly rebuild relies on an uncached runner to re-run `dnf update`.
 - Exedore runs two runner VMs at 16 GiB each (`GHA_VM_MEMORY`), GitHub's
   standard runner size, instead of five at 8 GiB; the slice allows 26G/30G.
   Public repos run on GitHub's runners, so these serve private repos.

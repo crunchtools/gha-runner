@@ -19,14 +19,12 @@ LABEL maintainer="crunchtools.com" \
 
 # Register, install, and unregister in ONE layer with a trap so unregister and
 # clean run on any exit (constitution II): no RHSM consumer leaks into
-# console.redhat.com inventory as a ghost host. UPGRADE_STAMP is per run, so
-# the layer cache can never replay an old `dnf update`: the weekly rebuild is
-# what carries RHEL errata in.
-ARG UPGRADE_STAMP=unset
+# console.redhat.com inventory as a ghost host. The weekly rebuild is what
+# carries RHEL errata in: it runs on an ephemeral runner with a per-run cache,
+# so this layer is built fresh, not replayed. Nothing here forces that.
 RUN --mount=type=secret,id=activation_key \
     --mount=type=secret,id=org_id <<'RUNEOF'
 set -euo pipefail
-echo "upgrade stamp: $UPGRADE_STAMP"
 subscription-manager register \
     --activationkey="$(cat /run/secrets/activation_key)" \
     --org="$(cat /run/secrets/org_id)"
