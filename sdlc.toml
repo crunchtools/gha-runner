@@ -5,7 +5,7 @@ repo-kinds = ["container-image"]
 
 # The repo's own tests, which ran as three workflows before the fleet ci.yml.
 [tool.sdlc.ci]
-checks = ["deploy-units", "runner-prune", "images-warm", "grype-expiry"]
+checks = ["deploy-units", "runner-prune", "images-warm", "vm-promote", "vm-disk", "grype-expiry"]
 # The Containerfile needs RHSM secrets that `sdlc ci` is not given. The image
 # job builds it with them and runs bootc-lint and container-scan on that build.
 skip = ["container-build", "bootc-lint", "container-scan"]
@@ -24,6 +24,18 @@ argv = ["bash", "scripts/gha-runner-prune-test.sh"]
 [tool.sdlc.ci.images-warm]
 kind = "command"
 argv = ["bash", "scripts/gha-images-warm-test.sh"]
+
+# gha-runner-vm-promote takes a digest and nothing else. It needs flock, which
+# the default check image lacks; this Debian image has util-linux.
+[tool.sdlc.ci.vm-promote]
+kind = "command"
+image = "docker.io/library/python@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b"
+argv = ["bash", "scripts/gha-runner-vm-promote-test.sh"]
+
+# gha-runner-vm-disk binds bootc-image-builder's store from its work directory.
+[tool.sdlc.ci.vm-disk]
+kind = "command"
+argv = ["bash", "scripts/gha-runner-vm-disk-test.sh"]
 
 # No grype ignore past its EXPIRES date. PyYAML comes from PyPI, by hash.
 [tool.sdlc.ci.grype-expiry]

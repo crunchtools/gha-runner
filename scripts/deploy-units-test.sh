@@ -93,3 +93,4 @@ if [ "$failures" -gt 0 ]; then
   exit 1
 fi
 echo "deploy units: all checks passed"
+bash "$(dirname "$0")/gha-runner-vm-disk-test.sh"

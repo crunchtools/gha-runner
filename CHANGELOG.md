@@ -18,9 +18,6 @@ All notable changes to this project are documented here. The format follows
 - Exedore runs two runner VMs at 16 GiB each (`GHA_VM_MEMORY`), GitHub's
   standard runner size, instead of five at 8 GiB; the slice allows 26G/30G.
   Public repos run on GitHub's runners, so these serve private repos.
-
-### Changed
-
 - **Breaking: the runner is a RHEL bootc VM image** (RT #1664). The
   Containerfile now builds `quay.io/crunchtools/gha-runner` on
   `rhel10/rhel-bootc` (pinned by digest): podman, the docker CLI (pinned by
@@ -31,11 +28,26 @@ All notable changes to this project are documented here. The format follows
   `container.yml` builds it with RHSM, gates it (`bootc container lint` and
   `scripts/vm-smoke-test.sh`) and signs it.
 
+### Added
+
+- `gha-runner-vm-promote sha256:<digest>`: the one command that swaps the VM
+  image pin and starts the disk rebuild, digest-only so it can run unattended.
+  While a disk build is already running, or another promote holds its lock,
+  it changes nothing and exits 75: that oneshot read the old pin, and a second
+  start would merge into it. It holds the lock while it waits, up to 30 s, for
+  systemd to start the build; a start still queued after that reads the pin
+  only when it runs, so a later promote supersedes it. Each backup gets a
+  unique name.
+
 ### Fixed
 
 - **Jobs get a `HOME`.** `gha-runner.service` runs as root with no `User=`, so
   systemd set no `HOME`, and `sdlc`'s launcher (`set -u`) died on
   `HOME: unbound variable`. The unit sets `HOME=/root`; the smoke test checks it.
+- **The VM base disk builds on the onsite disk.** bootc-image-builder's `/store`
+  was an anonymous podman volume on Exedore's `/var` (6.6 GB free), which the
+  3.4 GB image plus its ostree commit filled: `syncfs(repo): No space left on
+  device`. `gha-runner-vm-disk` now mounts it from the build's work directory.
 - **The VM image ships the tools jobs ran on**: git, the gh CLI (2.103.0,
   sha256-verified), skopeo, openssl, python3-pip and the browser libraries the
   container runner had. Without git, `actions/checkout` fell back to a REST

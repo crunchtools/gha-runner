@@ -32,7 +32,7 @@ GitHub-hosted runner: the VM's root podman (its socket is the job's
 | Piece | Where |
 |---|---|
 | Units | `gha-runner@.service`, `gha-runner-vm-disk.service`, `gha-runner-vm-store.{service,timer}` |
-| Scripts | `/srv/gha-runner/bin/gha-runner-vm{,-mint,-disk,-store}` |
+| Scripts | `/srv/gha-runner/bin/gha-runner-vm{,-mint,-disk,-store,-promote}` |
 | Env (no secrets) | `/srv/gha-runner/config/gha-runner-vm.env`: labels and the VM image pin |
 | Users | `/etc/sysusers.d/gha-runner-vm.conf`: `ghvmN` uid 2150+N, in `kvm`, inside the egress fence |
 | Base disk | `/var/mnt/onsite/gha-runner-cache/vm/base.qcow2`, built by bootc-image-builder from `GHA_VM_IMAGE`; each job gets a qcow2 overlay, deleted after |
@@ -40,8 +40,15 @@ GitHub-hosted runner: the VM's root podman (its socket is the job's
 | Memory | `GHA_VM_MEMORY` per VM (16 GiB, GitHub's standard runner size), free page reporting, zram swap (`/etc/systemd/zram-generator.conf`); KSM stays off |
 | App key | `srv-secrets@gha-runner-uncached1`; the VM gets a one-runner JIT config as the `gha.jitconfig` SMBIOS credential, never the key |
 
-To promote a VM image, set `GHA_VM_IMAGE` to the new digest, then
-`systemctl start gha-runner-vm-disk`; running VMs finish on the old disk.
+To promote a VM image, run `/srv/gha-runner/bin/gha-runner-vm-promote sha256:<digest>`:
+it backs up the env file to `/root/.backups/`, sets `GHA_VM_IMAGE`, and starts
+`gha-runner-vm-disk`. Running VMs finish on the old disk. While a build is
+already running it changes nothing and exits 75: that build read the old pin,
+so retry when it finishes. It takes a digest and nothing else, so it is the one
+command Josui may run here unattended. Land the same digest in
+`gha-runner-vm.env` by pull request. If the build fails, the pin stays on the
+new digest while `base.qcow2` stays on the old one, and every boot retries it;
+to roll back, promote the old digest (it is in the backup).
 
 ## Limits
 
