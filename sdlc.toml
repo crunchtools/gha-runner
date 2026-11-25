@@ -39,6 +39,10 @@ format = "oci"
 free-disk = true
 redhat-registry = true
 rhsm = true
+# NOT ENFORCED until crunchtools/sdlc#118: sdlc 0.15 accepts boot-command and
+# prints it, but runs no shell in the job that holds the registry secrets. The
+# image job's bootc-lint is what gates the image; scripts/vm-smoke-test.sh's
+# runner, tool, unit and credential-guard assertions do not run in CI.
 boot = "command"
 boot-command = "bash scripts/vm-smoke-test.sh \"$IMAGE\""
 boot-timeout = 600
