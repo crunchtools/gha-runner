@@ -4,6 +4,7 @@
 # pinned by hash and installed outside the read-only checkout.
 set -euo pipefail
 deps=$(mktemp -d)
+trap 'rm -rf "$deps"' EXIT
 pip install -q --no-cache-dir --root-user-action=ignore --require-hashes \
   --only-binary=:all: --target "$deps" -r scripts/grype-expiry-requirements.txt
 export PYTHONPATH=$deps
