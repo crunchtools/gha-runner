@@ -5,7 +5,6 @@
 # Containerfiles build from (counts are Containerfiles using each).
 # Only the warm timer writes the store; jobs read it and cannot change it.
 quay.io/crunchtools/sdlc:latest
-quay.io/crunchtools/sdlc:main
 quay.io/crunchtools/gatehouse:latest
 quay.io/crunchtools/gourmand:main
 quay.io/hummingbird/python:3.14-builder
