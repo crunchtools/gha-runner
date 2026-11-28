@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **The `docker` client comes from Docker's static tarball** (29.10.0, pinned
+  by sha256) instead of a `COPY --from` docker.io image, which the image job
+  refuses once crunchtools/sdlc#287 ships (#73). Only the client is installed,
+  as before.
 - **CI is the fleet `ci.yml` (sdlc 0.15).** The old workflows are gone and
   their checks live in `sdlc.toml`. A pull request's check holds no RHSM
   secrets, so it skips the image's build, `bootc-lint` and scan; the image job
