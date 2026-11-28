@@ -51,9 +51,18 @@ rm -rf /var/cache/dnf /var/cache/yum
 RUNEOF
 
 # Workflows call `docker`; podman answers on the socket the tmpfiles entry
-# links to /run/docker.sock. 29.10.0, the docker:29-cli index.
-COPY --from=docker.io/library/docker@sha256:34507eb5069d8be82c95dd3b6987d4250fd5fee49b82e2509b7d7a7030740d6d \
-     /usr/local/bin/docker /usr/bin/docker
+# links to /run/docker.sock. Only the client from Docker's static tarball: the
+# image job trusts no docker.io source (gha-runner#73), and dockerd and
+# containerd have no place here.
+ARG DOCKER_VERSION=29.10.0
+ARG DOCKER_SHA256=7c1ebadc65c716cdc6d35fc78759ed0e4317debf43c21dd12f066f2006999def
+RUN set -eu; \
+    curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 -o /tmp/docker.tgz \
+      "https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_VERSION}.tgz"; \
+    echo "${DOCKER_SHA256}  /tmp/docker.tgz" | sha256sum -c -; \
+    tar xzf /tmp/docker.tgz -C /tmp docker/docker; \
+    install -m 0755 /tmp/docker/docker /usr/bin/docker; \
+    rm -rf /tmp/docker.tgz /tmp/docker
 
 # The runner lives read-only in /usr; runner-vm-start.sh copies it to /var for
 # the one job, since the runner writes into its own directory.
